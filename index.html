@@ -1938,4 +1938,66 @@ function freeBand(y0,y1){let l=0,r=W;const ob=[];const L=hudLayout();ob.push([L.
   for(const [x,y,w,h] of ob){if(y>y1||y+h<y0)continue;if(x+w/2<W/2)l=Math.max(l,x+w+4*DPRS);else r=Math.min(r,x-4*DPRS);}
   return[l,Math.max(l+10,r)];}
 
+// ======================================================================
+//  v3c: calmer police driving - look out for pedestrians, keep to roads,
+//  small reckless chance that grows with the wanted level
+// ======================================================================
+const COP_RECK=[0,.03,.04,.06,.1,.16,.24];   // chance a cop car drives "old school" for a few seconds
+function copLookPed(c,look,turn){const hw=c.W/2+8;let best=null,bf=1e9,bl=0;const sp=Math.hypot(c.vx,c.vy)||1;
+  // scan along the heading, the predicted heading (steering) and the actual velocity (slides)
+  const dirs=[c.a,c.a+clamp(turn||0,-1,1)*.5,Math.atan2(c.vy,c.vx)];
+  for(const p of peds){if(p.dead)continue;const dx=p.x-c.x,dy=p.y-c.y;if(Math.abs(dx)>look+24||Math.abs(dy)>look+24)continue;
+    const r=Math.hypot(dx,dy);if(r<c.L/2+16){const f=dx*Math.cos(c.a)+dy*Math.sin(c.a);if(f>-c.L*.2&&r<bf){bf=Math.max(1,f);best=p;bl=-dx*Math.sin(c.a)+dy*Math.cos(c.a);}continue;}
+    for(let k=0;k<(sp>20?3:2);k++){const fx=Math.cos(dirs[k]),fy=Math.sin(dirs[k]),f=dx*fx+dy*fy;if(f<c.L*.25||f>look)continue;const l=-dx*fy+dy*fx;
+      if(Math.abs(l)<hw+f*.12&&f<bf){bf=f;best=p;bl=l;}}}
+  return best?{p:best,f:bf,l:bl}:null;}
+// does the straight line to the target cut across a sidewalk / lot corner where pedestrians are standing?
+function copOffRoad(c,tx,ty,maxD){const dx=tx-c.x,dy=ty-c.y,d=Math.hypot(dx,dy)||1,n=Math.ceil(Math.min(d,maxD)/14);
+  const pts=[];for(let i=1;i<=n;i++){const x=c.x+dx/d*i*14,y=c.y+dy/d*i*14;if(tileW(x,y)!==ROAD)pts.push([x,y]);}if(!pts.length)return false;
+  // only worth leaving the corner alone when someone is actually standing on it
+  for(const p of peds){if(p.dead)continue;for(const [x,y] of pts)if(Math.abs(p.x-x)<26&&Math.abs(p.y-y)<26)return true;}return false;}
+// like roadNav but prefers directions that stay on road tiles and avoids U-turns unless needed
+function copRoadNav(c,ux,uy){const tx=Math.floor(c.x/T),ty=Math.floor(c.y/T),fx=Math.cos(c.a),fy=Math.sin(c.a);let best=-1,bs=-1e9;
+  for(let d=0;d<4;d++){let ok=true,road=0;for(let k=1;k<=3;k++){const t=tileAt(tx+DX[d]*k,ty+DY[d]*k);if(solid(t)){ok=false;break;}if(t===ROAD)road++;}if(!ok)continue;
+    const fwd=DX[d]*fx+DY[d]*fy;const s=DX[d]*ux+DY[d]*uy+fwd*.6+road*.35-(fwd<-.7?.6:0);if(s>bs){bs=s;best=d;}}
+  if(best<0)return null;let x=c.x+DX[best]*90,y=c.y+DY[best]*90;
+  if(DX[best]!==0&&ty%P<2)y=(Math.floor(ty/P)*P+1)*T;if(DY[best]!==0&&tx%P<2)x=(Math.floor(tx/P)*P+1)*T;return{x,y};}
+// sirens: pedestrians in front of a chasing cop car jump sideways out of its path (most of the time)
+function copWarnPeds(c){const fx=Math.cos(c.a),fy=Math.sin(c.a),sp=Math.max(0,c.vf),look=60+sp*.9;
+  for(const p of peds){if(p.dead||p.cop||p.hostile||p.down>0||p.kind==='thug'||p.kind==='target')continue;const dx=p.x-c.x,dy=p.y-c.y;if(Math.abs(dx)>look||Math.abs(dy)>look)continue;
+    const f=dx*fx+dy*fy;if(f<-6||f>look)continue;const l=-dx*fy+dy*fx;if(Math.abs(l)>c.W/2+26)continue;
+    if(p.sirenT>gtime)continue;p.sirenT=gtime+1.2;if(R()>.88)continue;   // some freeze - it is GTA after all
+    // flee from the nearest point on the car's path -> sideways dive
+    p.state='flee';p.fx=c.x+fx*f-fy*(l>=0?-4:4);p.fy=c.y+fy*f+fx*(l>=0?-4:4);p.t=rr(.7,1.2);p.dive=.6;}}
+function aiChase(c,dt){const ai=c.ai;const tg=player.inCar||player;
+  if(!player.active||stars===0){c.th=c.vf>8?-1:0;c.st=0;c.hb=false;if(stars===0)ai.mode='idle';return;}
+  ai.reckT=(ai.reckT||0)-dt;if(ai.reckT<=0){ai.reckT=rr(5,9);ai.reck=R()<COP_RECK[stars];}
+  const dx=tg.x-c.x,dy=tg.y-c.y,dist=Math.hypot(dx,dy)||1;let tx=tg.x+(tg.vx||0)*.35,ty=tg.y+(tg.vy||0)*.35;
+  const closeR=120+30*stars;
+  ai.navT-=dt;if(ai.navT<=0){ai.navT=.3;ai.nav=null;const L=los(c.x,c.y,tg.x,tg.y);
+    if(dist>110&&!L)ai.nav=roadNav(c,dx/dist,dy/dist);
+    else if(!ai.reck&&stars<5&&dist>closeR&&tileW(c.x,c.y)===ROAD&&copOffRoad(c,tx,ty,170))ai.nav=copRoadNav(c,dx/dist,dy/dist);
+    ai.warnT=(ai.warnT||0)-.3;if(ai.warnT<=0){ai.warnT=.3;copWarnPeds(c);}}
+  if(ai.nav){tx=ai.nav.x;ty=ai.nav.y;}
+  const diff=angDiff(Math.atan2(ty-c.y,tx-c.x),c.a),look=26+Math.abs(c.vf)*.3;
+  const wl=solid(tileW(c.x+Math.cos(c.a-.55)*look,c.y+Math.sin(c.a-.55)*look)),wr=solid(tileW(c.x+Math.cos(c.a+.55)*look,c.y+Math.sin(c.a+.55)*look)),
+    wf=solid(tileW(c.x+Math.cos(c.a)*look*1.2,c.y+Math.sin(c.a)*look*1.2));
+  let avoid=0;if(wl)avoid+=1;if(wr)avoid-=1;if(wf&&!wl&&!wr)avoid+=diff>=0?1:-1;
+  let st=clamp(diff*2.5+avoid*.9,-1,1),th=1;
+  if(Math.abs(diff)>1.6&&dist<220)th=.45;
+  if(!player.inCar&&dist<100)th=c.vf>10?-1:0;
+  // pedestrian look-ahead: swerve if there is room, brake if we cannot stop in time, creep (<55, never lethal) if they will not move
+  ai.pedHit=null;
+  if(!ai.reck&&c.vf>-5){const lk=36+Math.max(0,c.vf)*.7,h=copLookPed(c,lk,st);
+    if(h){ai.pedHit=h;const side=h.l>=0?-1:1,sa=c.a+side*.55,open=!solid(tileW(c.x+Math.cos(sa)*lk*.7,c.y+Math.sin(sa)*lk*.7));
+      if(open&&!avoid)st=clamp(st+side*1.3*(1-h.f/lk),-1,1);
+      const stopD=Math.max(0,c.vf)**2/(2*540)+8;
+      if(h.f<stopD+14)th=c.vf>48?-1:.25;else if(c.vf>150)th=Math.min(th,0);}}
+  if(ai.rev>0){ai.rev-=dt;th=-1;st=-(Math.sign(diff)||1);}
+  else{const sp=Math.hypot(c.vx,c.vy);ai.pedBlk=ai.pedHit&&sp<18?(ai.pedBlk||0)+dt:0;if(sp<18&&(th>.3||(ai.pedHit&&ai.pedBlk>1.4))&&(!ai.pedHit||ai.pedBlk>1.4)){ai.stuck+=dt;if(ai.stuck>.8){ai.stuck=0;ai.rev=rr(.6,1.1);}}else ai.stuck=Math.max(0,ai.stuck-dt);}
+  c.th=th;c.st=st;c.hb=Math.abs(diff)>1.1&&c.vf>170;
+  if(!player.inCar&&dist<150&&Math.hypot(c.vx,c.vy)<35&&!c.deployed)deployCops(c);}
+// diving peds sprint for a moment
+updatePed=(o=>function(p,dt){if(p.dive>0&&!p.dead&&p.state==='flee'){p.dive-=dt;const x0=p.x,y0=p.y;o(p,dt);const mx=p.x-x0,my=p.y-y0;p.x+=mx*.6;p.y+=my*.6;resolveCircleTiles(p,4);return;}return o(p,dt);})(updatePed);
+
 </script></body></html>
