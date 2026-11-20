@@ -2025,6 +2025,47 @@ const VL=[],HL=[];
 const vAt=new Int8Array(N*N).fill(-1),hAt=new Int8Array(N*N).fill(-1);
 const NODES=[],NODEAT=new Int16Array(N*N).fill(-1),vN=[],hN=[];
 const isRuralT=(tx,ty)=>tx>=CITYN||ty>=CITYN;
+const AVE_FIX={buildings:0,removed:0,pois:[],atms:0,hooks:0,slots:0,cams:0,trees:0,tiles:0};
+function avenueSidewalks(){
+  const strips=[];// {ax,c}: column (ax v) or row (ax h) of tiles that must become sidewalk
+  for(const L of [...VL,...HL]){if(!L||L.i<1||L.i>=B)continue;if(L.mn>=0&&L.mx<=1)continue;
+    for(const c of [L.i*P+L.mn-1,L.i*P+L.mx+1])strips.push({ax:L.ax,c,side:c<L.i*P?-1:1,L});}
+  const inStrip=(st,tx,ty)=>(st.ax==='v'?tx:ty)===st.c&&(st.ax==='v'?ty:tx)>=1&&(st.ax==='v'?ty:tx)<CITYN-1;
+  // tiles -> sidewalk (crossing roads stay road)
+  for(const st of strips)for(let u=1;u<CITYN-1;u++){const tx=st.ax==='v'?st.c:u,ty=st.ax==='v'?u:st.c,k=ty*N+tx;if(map[k]===ROAD||map[k]===SIDE)continue;map[k]=SIDE;AVE_FIX.tiles++;}
+  // buildings: trim the face that sat on the strip
+  const keep=[];
+  for(const b of buildings){if(b.rural){keep.push(b);continue;}let hit=false;
+    for(const st of strips){const a0=st.c*T,a1=a0+T;
+      if(st.ax==='v'){if(b.x1<=a0||b.x0>=a1||b.y1<=T||b.y0>=(CITYN-1)*T)continue;hit=true;if(st.side<0)b.x1=Math.min(b.x1,a0);else b.x0=Math.max(b.x0,a1);}
+      else{if(b.y1<=a0||b.y0>=a1||b.x1<=T||b.x0>=(CITYN-1)*T)continue;hit=true;if(st.side<0)b.y1=Math.min(b.y1,a0);else b.y0=Math.max(b.y0,a1);}}
+    if(!hit){keep.push(b);continue;}
+    if(b.x1-b.x0<T||b.y1-b.y0<T){if(b.poi)keep.push(b);else{AVE_FIX.removed++;continue;}}// (a building with a shop is never dropped)
+    AVE_FIX.buildings++;b.trimmed=true;
+    if(b.det)b.det=b.det.filter(d=>d.x>=b.x0+2&&d.y>=b.y0+2&&d.x+d.w<=b.x1-2&&d.y+d.h<=b.y1-2);
+    keep.push(b);}
+  buildings.length=0;for(const b of keep)buildings.push(b);
+  // shop / house / apartment doors on a trimmed building: move them onto the new face, spot stays 16px out on the sidewalk
+  for(const o of pois){const b=o.bd;if(!b||!b.trimmed)continue;const d=o.door,sp=o.spot,n=o.n||[0,0],ox=sp.x-d.x,oy=sp.y-d.y,before=[d.x,d.y];
+    if(n[0]!==0){d.x=n[0]>0?b.x1:b.x0;d.y=clamp(d.y,b.y0+10,b.y1-10);}else{d.y=n[1]>0?b.y1:b.y0;d.x=clamp(d.x,b.x0+10,b.x1-10);}
+    sp.x=d.x+ox;sp.y=d.y+oy;if(before[0]!==d.x||before[1]!==d.y)AVE_FIX.pois.push(o.type+':'+o.name);}
+  // ATMs / hook-up spots on the old sidewalk (now a lane): step them onto the new sidewalk
+  const shiftOnto=(a,isAtm)=>{const tx=Math.floor(a.x/T),ty=Math.floor(a.y/T);if(map[ty*N+tx]!==ROAD)return false;
+    for(const st of strips){const u=st.ax==='v'?tx:ty;if(Math.abs(u-st.c)>2)continue;const L=st.L;const offs=u-L.i*P;if(offs<L.mn||offs>L.mx)continue;
+      const nx=st.ax==='v'?(st.c+.5)*T:a.x,ny=st.ax==='v'?a.y:(st.c+.5)*T;if((st.side<0)!==((st.ax==='v'?nx:ny)<(st.ax==='v'?a.x:a.y)))continue;
+      if(map[Math.floor(ny/T)*N+Math.floor(nx/T)]!==SIDE)continue;a.x=nx;a.y=ny;
+      if(isAtm){for(let dd=0;dd<4;dd++)if(map[(Math.floor(ny/T)+DY[dd])*N+Math.floor(nx/T)+DX[dd]]===BLD){a.d=dd;break;}a.wx=a.x+DX[a.d]*11;a.wy=a.y+DY[a.d]*11;}return true;}return false;};
+  for(const a of atms)if(shiftOnto(a,true))AVE_FIX.atms++;
+  for(const h of hookSpots)if(shiftOnto(h,false))AVE_FIX.hooks++;
+  // parking-lot slots, cameras and trees on the strip
+  const onStrip=(x,y)=>strips.some(st=>inStrip(st,Math.floor(x/T),Math.floor(y/T)));
+  for(let i=lotSlots.length-1;i>=0;i--)if(onStrip(lotSlots[i].x,lotSlots[i].y)){lotSlots.splice(i,1);AVE_FIX.slots++;}
+  for(const c of cams){let moved=false;for(const st of strips){const l=c.lot,a0=st.c*T,a1=a0+T;
+      if(st.ax==='v'&&l.x0<a1&&l.x1>a0&&l.y1>T){if(st.side<0){l.x1=a0;}else{l.x0=a1;}moved=true;}
+      if(st.ax==='h'&&l.y0<a1&&l.y1>a0&&l.x1>T){if(st.side<0){l.y1=a0;}else{l.y0=a1;}moved=true;}}
+    if(moved){c.x=clamp(c.x,c.lot.x0+5,c.lot.x1-5);c.y=clamp(c.y,c.lot.y0+5,c.lot.y1-5);c.base=Math.atan2((c.lot.y0+c.lot.y1)/2-c.y,(c.lot.x0+c.lot.x1)/2-c.x);c.a=c.base;AVE_FIX.cams++;}}
+  for(let i=trees.length-1;i>=0;i--)if(onStrip(trees[i].x,trees[i].y)){trees.splice(i,1);AVE_FIX.trees++;}
+}
 function genRoads4(){const rnd=mulberry32(31337);
   // 1) countryside ground
   for(let ty=0;ty<N;ty++)for(let tx=0;tx<N;tx++)if(isRuralT(tx,ty))map[ty*N+tx]=GRASS;
@@ -2035,6 +2076,9 @@ function genRoads4(){const rnd=mulberry32(31337);
   for(const L of HL){if(!L)continue;const [x0,x1]=xS(L);for(let tx=x0;tx<=x1;tx++)for(const o of L.offs){const ty=L.i*P+o,k=ty*N+tx;map[k]=ROAD;hAt[k]=L.i;}}
   // leftover city grid road tiles that no line owns (none expected) -> sidewalk
   for(let k=0;k<N*N;k++)if(map[k]===ROAD&&vAt[k]<0&&hAt[k]<0)map[k]=SIDE;
+  // 2b) wide streets: give them a proper sidewalk again on both sides by trimming the buildings / lots / parks
+  //     that back onto the new sidewalk column (only inside the city; the county has verges, not sidewalks)
+  avenueSidewalks();
   // 3) nodes
   for(const V of VL){if(!V)continue;vN[V.i]=[];}for(const Hh of HL){if(!Hh)continue;hN[Hh.i]=[];}
   for(const V of VL){if(!V)continue;for(const Hh of HL){if(!Hh)continue;const ix=V.i,iy=Hh.i;if(iy<V.span[0]||iy>V.span[1]||ix<Hh.span[0]||ix>Hh.span[1])continue;
