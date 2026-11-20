@@ -381,7 +381,7 @@ function updateCamera(dt){const tg=player.inCar||player;let tx=tg.x,ty=tg.y,sp=0
   if(state==='title'){tx=focus.x;ty=focus.y;sp=120;}
   else if(player.inCar){tx+=tg.vx*.35;ty+=tg.vy*.35;sp=Math.hypot(tg.vx,tg.vy);}
   const k=1-Math.exp(-4*dt);cam.x+=(tx-cam.x)*k;cam.y+=(ty-cam.y)*k;
-  const S0=LH/(11.5*T),tS=S0*(1-.38*clamp(sp/330,0,1));S+=(tS-S)*(1-Math.exp(-1.6*dt));shakeA*=Math.exp(-6*dt);flashT=Math.max(0,flashT-dt);}
+  const S0=baseS(),tS=S0*(1-.38*clamp(sp/330,0,1));S+=(tS-S)*(1-Math.exp(-1.6*dt));shakeA*=Math.exp(-6*dt);flashT=Math.max(0,flashT-dt);}
 function updateAudio(){if(!AC)return;const t=AC.currentTime;let eg=0,ef=50;
   if(player.inCar&&state==='play'){const sp=Math.hypot(player.inCar.vx,player.inCar.vy);eg=.05;ef=40+sp*.32+(player.inCar.th>0?18:0);}
   engGain.gain.setTargetAtTime(muted?0:eg,t,.05);engOsc.frequency.setTargetAtTime(ef,t,.05);
@@ -1008,7 +1008,7 @@ function startGame(fresh){initAudio();cars=[];peds=[];bullets=[];parts=[];pickup
     shirt:'#e2c22a',pants:'#3a2a1a',hat:null});
   initV3();let loaded=false;if(fresh){try{localStorage.removeItem(SAVE_KEY);}catch(e){}}else loaded=loadGame();
   player.hp=hpMax();player.stam=stamMax();if(player.ammo[player.wp]<=0)autoWeapon();
-  focus.x=player.x;focus.y=player.y;cam.x=player.x;cam.y=player.y;S=Math.min(LH/(11.5*T),LW/(9*T));state='play';saveT=30;
+  focus.x=player.x;focus.y=player.y;cam.x=player.x;cam.y=player.y;S=baseS();state='play';saveT=30;
   const c=makeCar('sport',(5*P+1.5)*T,(ty+.5)*T,-PI/2);c.color='#d02020';c.roof=shade('#d02020',1.15);c.dark=shade('#d02020',.7);cars.push(c);
   pickups.push({type:'smg',x:player.x,y:player.y+64,t:0,life:1e9,val:0});
   for(let i=0;i<PEDS;i++)spawnPed(60,700);for(let i=0;i<TRAFFIC;i++)spawnTraffic(120,900,R()<.12);for(let i=0;i<PARKED;i++)spawnParked(100,1000);for(let i=0;i<6;i++)spawnPickup(150,900);
@@ -1687,7 +1687,7 @@ Object.defineProperties(window.__game.dbg,Object.getOwnPropertyDescriptors({get 
 //  v3m: touchscreen controls (virtual sticks, buttons, tappable menus)
 // ======================================================================
 var TOUCHUI, DPRS=1, CVL=0, CVT=0, TOUCHCAP=false;
-function touchPrefs(){let o={};try{o=JSON.parse(localStorage.getItem('pta_touch')||'{}')||{};}catch(e){}return{mode:o.mode||'auto',steer:o.steer||'dir',vib:o.vib!==false};}
+function touchPrefs(){let o={};try{o=JSON.parse(localStorage.getItem('pta_touch')||'{}')||{};}catch(e){}return{mode:o.mode||'auto',steer:o.steer||'dir',vib:o.vib!==false,zoom:o.zoom|0};}
 function resize(){
   try{TOUCHCAP=(window.matchMedia&&matchMedia('(pointer: coarse)').matches)||('ontouchstart' in window);}catch(e){TOUCHCAP=false;}
   if(TOUCHUI===undefined){const pr=touchPrefs();TOUCHUI=pr.mode==='on'||(pr.mode==='auto'&&TOUCHCAP);}
@@ -1698,7 +1698,15 @@ function resize(){
   PIX=HIRES?Math.max(1,Math.round(H/600)):Math.max(2,Math.round(H/330));LW=Math.ceil(W/PIX);LH=Math.ceil(H/PIX);
   buf.width=LW;buf.height=LH;U=Math.max((TOUCHUI?.62:.55)*DPRS,Math.min(W/1280,H/720));
   ctx.imageSmoothingEnabled=false;g.imageSmoothingEnabled=false;
-  if(window.__ptaBoot)S=Math.min(LH/(11.5*T),LW/(9*T));}
+  if(window.__ptaBoot)S=baseS();}
+// camera zoom: desktop = 11.5 tiles tall (unchanged). Touch: sized from the CSS viewport so sprites keep a
+// comfortable on-screen size; landscape ~10.25 tiles tall at 390 css px, portrait ~8 tiles wide at 390 css px (sqrt-scaled by size). Plus user zoom steps.
+function viewInfo(){const wc=W/DPRS,hc=H/DPRS,port=hc>wc*1.05;let tiles,S0;
+  if(!TOUCHUI){tiles=11.5;S0=LH/(11.5*T);}
+  else if(port){tiles=clamp(8*Math.sqrt(wc/390),6.5,11);S0=LW/(tiles*T);}
+  else{tiles=clamp(10.25*Math.sqrt(hc/390),8.5,12.5);S0=LH/(tiles*T);}
+  const z=window.__ptaBoot?(TS.pref.zoom|0):0;return{port,tiles,S0:S0*Math.pow(1.1,z),z,tilesW:LW/(S0*Math.pow(1.1,z)*T),tilesH:LH/(S0*Math.pow(1.1,z)*T)};}
+function baseS(){return viewInfo().S0;}
 const TOUCH_TITLE=[['LEFT THUMB','Move / drive'],['RIGHT THUMB','Aim, push past ring = fire'],['ACTION','Cars, doors, shops, loot'],['ROB / MUG','Appears when you can rob'],['RUN / NOS','Sprint / nitro'],['BRAKE','Handbrake (in a car)'],['GUN','Switch weapon'],['\u260e / BAG','Phone + stolen goods']];
 const TS={pref:touchPrefs(),joy:null,aim:null,btns:[],held:{},taps:[],menuDrag:null,portraitT:0,lastTouch:-1e9};
 function saveTouchPrefs(){try{localStorage.setItem('pta_touch',JSON.stringify(TS.pref));}catch(e){}}
@@ -1707,6 +1715,8 @@ function releaseTouch(){TS.joy=null;if(TS.aim){TS.aim=null;mouse.down=false;mous
 function touchSysItems(){const P=TS.pref;return[
   {label:'Touch controls: '+(P.mode==='auto'?'AUTO':P.mode==='on'?'ALWAYS ON':'OFF'),act:()=>{P.mode=P.mode==='auto'?'on':P.mode==='on'?'off':'auto';saveTouchPrefs();setTouchUI(P.mode==='on'||(P.mode==='auto'&&(TOUCHCAP||TOUCHUI&&performance.now()-TS.lastTouch<5000)));}},
   {label:'Touch steering: '+(P.steer==='dir'?'POINT & DRIVE':'GAS / STEER'),act:()=>{P.steer=P.steer==='dir'?'tank':'dir';saveTouchPrefs();}},
+  {label:'View zoom in  (+)',right:Math.round(100*Math.pow(1.1,P.zoom|0))+'%',act:()=>{P.zoom=Math.min(5,(P.zoom|0)+1);saveTouchPrefs();}},
+  {label:'View zoom out  (-)',right:Math.round(100*Math.pow(1.1,P.zoom|0))+'%',act:()=>{P.zoom=Math.max(-5,(P.zoom|0)-1);saveTouchPrefs();}},
   {label:'Vibration: '+(P.vib?'ON':'OFF'),act:()=>{P.vib=!P.vib;saveTouchPrefs();buzz(30);}},
   {label:'Fullscreen',act:()=>toggleFS()}];}
 function buzz(ms){if(!TOUCHUI||!TS.pref.vib)return;try{navigator.vibrate&&navigator.vibrate(ms);}catch(e){}}
@@ -1829,7 +1839,7 @@ function drawTouch(){const D=DPRS;layoutTouch();ctx.save();ctx.textAlign='center
       ctx.font='bold '+Math.round(14*D)+'px '+FONT;outline('\u27f3 ROTATE TO LANDSCAPE',W/2,y,'#ffd23a',3*D);}}else TS.portraitT=0;
   ctx.restore();}
 render=(function(orig){return function(){orig();if(TOUCHUI)drawTouch();};})(render);
-Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get touch(){return{on:TOUCHUI,cap:TOUCHCAP,dpr:DPRS,W,H,U,LW,LH,S,pref:TS.pref,joy:TS.joy,aim:TS.aim,held:Object.keys(TS.held),
+Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get touch(){return{view:viewInfo(),on:TOUCHUI,cap:TOUCHCAP,dpr:DPRS,W,H,U,LW,LH,S,pref:TS.pref,joy:TS.joy,aim:TS.aim,held:Object.keys(TS.held),
   btns:layoutTouch().map(b=>({id:b.id,label:b.label,x:Math.round((b.rect?b.rect[0]+b.rect[2]/2:b.x)/DPRS+CVL),y:Math.round((b.rect?b.rect[1]+b.rect[3]/2:b.y)/DPRS+CVT),r:Math.round((b.r||20)/DPRS)})),rects:uiRects.map(r=>({x:Math.round(r.x/DPRS+CVL),y:Math.round(r.y/DPRS+CVT),w:Math.round(r.w/DPRS),h:Math.round(r.h/DPRS)}))};},
   setTouch:v=>setTouchUI(v)}));
 window.__ptaBoot=true;resize();
