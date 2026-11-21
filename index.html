@@ -490,8 +490,8 @@ function drawOver(){bigText('GAME OVER','#d81818',null);ctx.save();ctx.textAlign
 
 // ---------- game flow ----------
 const keys={},mouse={x:0,y:0,down:false,last:-99};
-addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(e.code))e.preventDefault();if(!keys[e.code])onPress(e.code);keys[e.code]=true;});
-addEventListener('keyup',e=>{keys[e.code]=false;});
+addEventListener('keydown',e=>kbDown(e));
+addEventListener('keyup',e=>kbUp(e));
 cv.addEventListener('mousemove',e=>{mouse.x=(e.clientX-CVL)*DPRS;mouse.y=(e.clientY-CVT)*DPRS;mouse.last=gtime;});
 cv.addEventListener('mousedown',e=>{mouse.x=(e.clientX-CVL)*DPRS;mouse.y=(e.clientY-CVT)*DPRS;mouse.last=gtime;initAudio();if(AC&&AC.state==='suspended')AC.resume();
   if(state==='title'||state==='over'){startGame();return;}mouse.down=true;});
@@ -764,7 +764,7 @@ function openGarage(o){const c=player.inCar;if(!c)return;const f=()=>{const it=[
   else{if(mission&&mission.type==='steal'&&mission.car===c)it.push({label:"DELIVER VINNIE'S ORDER",right:'JOB',act:()=>{closeMenu();deliverMissionCar(o);}});
     it.push({label:'Sell this car',price:null,right:'+$'+carPrice(c),note:c.stolen?'No questions asked':'',act:()=>{closeMenu();sellCar(o);}});
     it.push({label:'Respray (clears wanted level)',price:250,act:()=>{if(player.money<250){msg('NOT ENOUGH CASH','#f88');return;}player.money-=250;closeMenu();respray(c);}});
-    it.push(upgItem(c,'NITRO (SHIFT)','nitro',1,[900],[2],'Hold SHIFT to boost; refills over time'));
+    it.push(upgItem(c,'NITRO ('+KL('sprint')+')','nitro',1,[900],[2],'Hold '+KL('sprint')+' to boost; refills over time'));
     it.push(upgItem(c,'BULLETPROOF TIRES','bpt',1,[600],[2],'Tires can not be shot out'));
     it.push(upgItem(c,'RAM PLATE','ram',1,[700],[3],'You take 70% less crash damage, they take more'));}
   it.push({label:'Drive out',act:closeMenu});
@@ -1013,7 +1013,7 @@ function startGame(fresh){initAudio();cars=[];peds=[];bullets=[];parts=[];pickup
   const c=makeCar('sport',(5*P+1.5)*T,(ty+.5)*T,-PI/2);c.color='#d02020';c.roof=shade('#d02020',1.15);c.dark=shade('#d02020',.7);cars.push(c);
   pickups.push({type:'smg',x:player.x,y:player.y+64,t:0,life:1e9,val:0});
   for(let i=0;i<PEDS;i++)spawnPed(60,700);for(let i=0;i<TRAFFIC;i++)spawnTraffic(120,900,R()<.12);for(let i=0;i<PARKED;i++)spawnParked(100,1000);for(let i=0;i<6;i++)spawnPickup(150,900);
-  refreshOffers();msg(loaded?'WELCOME BACK. '+(TOUCHUI?'TAP \u260e FOR YOUR PHONE':'PRESS C FOR YOUR PHONE'):'WELCOME TO THE CITY. '+(TOUCHUI?'TAP \u260e FOR YOUR PHONE':'PRESS C FOR YOUR PHONE'),'#ffd23a',4);}
+  refreshOffers();msg(loaded?'WELCOME BACK. '+(TOUCHUI?'TAP \u260e FOR YOUR PHONE':'PRESS '+KL('phone')+' FOR YOUR PHONE'):'WELCOME TO THE CITY. '+(TOUCHUI?'TAP \u260e FOR YOUR PHONE':'PRESS '+KL('phone')+' FOR YOUR PHONE'),'#ffd23a',4);}
 function onPress(code){initAudio();if(AC&&AC.state==='suspended')AC.resume();
   if(state==='title'){if(code==='Enter'||code==='Space')startGame(false);else if(code==='KeyN')startGame(true);return;}
   if(fade)return;
@@ -1162,9 +1162,9 @@ function drawHUD(){const u=U,p=player;ctx.save();ctx.textBaseline='top';ctx.line
   if(p.inCar){const c=p.inCar,sp=Math.hypot(c.vx,c.vy),hasN=c.up&&c.up.nitro,ph=hasN?74*u:58*u;ctx.fillStyle='rgba(0,0,0,.55)';const cp=carPanelPos(HL,ph),cpy=cp.y;ctx.save();ctx.translate(cp.x-12*u,0);ctx.fillRect(12*u,cpy,230*u,ph);ctx.strokeStyle='#9cf';ctx.lineWidth=2*u;ctx.strokeRect(12*u,cpy,230*u,ph);
     const y0=cpy+6*u;ctx.font='bold '+Math.round(15*u)+'px '+FONT;outline(CAR_TYPES[c.type].name,22*u,y0,'#9cf',3*u);outline(Math.round(sp*.45)+' MPH',160*u,y0,c.boost?'#6cf':'#fff',3*u);
     bar(22*u,y0+24*u,210*u,10*u,c.hp/c.maxHp,c.fire>0?(Math.floor(gtime*8)%2?'#ff3000':'#ffa000'):c.hp/c.maxHp>.45?'#40c040':'#e0a020','#222');
-    ctx.font='bold '+Math.round(10*u)+'px '+FONT;outline(c.fire>0?'ON FIRE! [E] TO BAIL':c.flat?'FLAT TIRE! GET TO A GARAGE':'CAR CONDITION',22*u,y0+37*u,c.fire>0||c.flat?'#f66':'#aaa',2*u);
-    if(hasN)bar(22*u,y0+52*u,210*u,8*u,c.nos,'#3af','#0a1a2a','NITRO [SHIFT]');ctx.restore();}
-  else if(!interior&&!TOUCHUI){ctx.font=Math.round(12*u)+'px '+FONT;ctx.fillStyle='rgba(255,255,255,.6)';ctx.fillText('E: interact   R: rob/mug   C: phone   Q: weapon   SHIFT: sprint',14*u,H-22*u);}
+    ctx.font='bold '+Math.round(10*u)+'px '+FONT;outline(c.fire>0?'ON FIRE! ['+KL('interact')+'] TO BAIL':c.flat?'FLAT TIRE! GET TO A GARAGE':'CAR CONDITION',22*u,y0+37*u,c.fire>0||c.flat?'#f66':'#aaa',2*u);
+    if(hasN)bar(22*u,y0+52*u,210*u,8*u,c.nos,'#3af','#0a1a2a','NITRO ['+KL('sprint')+']');ctx.restore();}
+  else if(!interior&&!TOUCHUI){ctx.font=Math.round(12*u)+'px '+FONT;ctx.fillStyle='rgba(255,255,255,.6)';ctx.fillText(hintBarText(),14*u,H-22*u);}
   // minimap
   if(!interior){const ms=HL.mm.s,mx0=HL.mm.x,my0=HL.mm.y,k=2.6*u;ctx.save();ctx.beginPath();ctx.rect(mx0,my0,ms,ms);ctx.clip();ctx.fillStyle='#000';ctx.fillRect(mx0,my0,ms,ms);
     const ox=mx0+ms/2-focus.x/T*k,oy=my0+ms/2-focus.y/T*k,M=(x,y)=>[ox+x/T*k,oy+y/T*k];ctx.globalAlpha=.9;ctx.drawImage(mini,ox,oy,N*k,N*k);ctx.globalAlpha=1;
@@ -1185,10 +1185,10 @@ function drawHUD(){const u=U,p=player;ctx.save();ctx.textBaseline='top';ctx.line
   if(interior&&interior.rob){const r=interior.rob,bw=320*u;bar(W/2-bw/2,H*.3,bw,18*u,r.t/r.dur,'#4c4','#132','ROBBING... $'+Math.floor(r.got)+'  (STAY CLOSE)');}
   // prompts
   if(!menu&&!phone.open&&state==='play'&&!fade){ctx.textAlign='center';ctx.textBaseline='middle';const pu=u*TXS();ctx.font='bold '+Math.round(16*pu)+'px '+FONT;let py=H-(p.inCar?120:70)*u-(TXS()-1)*30*u;
-    for(const k of['R','E']){const pr=prompts[k];if(!pr)continue;ctx.font='bold '+Math.round(16*pu)+'px '+FONT;const txt=pr.label;const need=ctx.measureText(txt).width+56*pu;let bd=freeBand(py-17*pu,py+17*pu);
+    for(const k of['R','E']){const pr=prompts[k];if(!pr)continue;ctx.font='bold '+Math.round(16*pu)+'px '+FONT;const txt=pr.label;const kb_=kbBadge(k,pu),need=ctx.measureText(txt).width+56*pu+kb_.ex;let bd=freeBand(py-17*pu,py+17*pu);
       while(bd[1]-bd[0]<Math.min(need+8*u,W*.86)&&py>H*.45){py-=8*u;bd=freeBand(py-17*pu,py+17*pu);}
-      const cx=(bd[0]+bd[1])/2;fitText(txt,Math.min(W*.86,bd[1]-bd[0]-8*u)-56*pu);const tw=ctx.measureText(txt).width+56*pu;{const u=pu;ctx.fillStyle='rgba(0,0,0,.72)';uiRRect(ctx,cx-tw/2,py-15*u,tw,30*u,14*u);ctx.fill();ctx.strokeStyle=k==='R'?'#f66':'#ffd23a';ctx.lineWidth=2*u;ctx.stroke();
-      ctx.fillStyle=k==='R'?'#f66':'#ffd23a';ctx.fillRect(cx-tw/2+8*u,py-10*u,22*u,20*u);ctx.fillStyle='#000';ctx.fillText(k,cx-tw/2+19*u,py+1*u);outline(txt,cx+14*u,py+1*u,'#fff',3*u);py-=38*u;}}
+      const cx=(bd[0]+bd[1])/2;fitText(txt,Math.min(W*.86,bd[1]-bd[0]-8*u)-56*pu);const tw=ctx.measureText(txt).width+56*pu+kb_.ex;{const u=pu;ctx.fillStyle='rgba(0,0,0,.72)';uiRRect(ctx,cx-tw/2,py-15*u,tw,30*u,14*u);ctx.fill();ctx.strokeStyle=k==='R'?'#f66':'#ffd23a';ctx.lineWidth=2*u;ctx.stroke();
+      ctx.fillStyle=k==='R'?'#f66':'#ffd23a';ctx.fillRect(cx-tw/2+8*u,py-10*u,kb_.w,20*u);ctx.fillStyle='#000';{const f_=ctx.font;ctx.font=kb_.fs;ctx.fillText(kb_.kk,cx-tw/2+8*u+kb_.w/2,py+1*u);ctx.font=f_;}outline(txt,cx+14*u+kb_.ex/2,py+1*u,'#fff',3*u);py-=38*u;}}
     TS.promptTop=py+38*u-15*pu;
     ctx.textBaseline='top';}
   // messages, district, dead
@@ -1221,7 +1221,7 @@ function drawPhone(){const G=phoneGeom(),u=G.u,pw=G.pw,ph=G.ph,px=G.px,py=G.py,D
       ctx.fillStyle=a.col;uiRRect(ctx,cx-ic/2,cy,ic,ic,12*u);ctx.fill();ctx.font='bold '+Math.round(ic*.54)+'px '+FONT;ctx.fillStyle='#fff';ctx.textBaseline='middle';ctx.fillText(a.g,cx,cy+ic*.52);ctx.textBaseline='top';
       ctx.font='bold '+Math.round(12*u)+'px '+FONT;outline(a.name,cx,cy+ic+5*u,sel?'#ffd23a':'#fff',2*u);
       uiRects.push({tag:'app:'+a.id,x:cx-cw/2,y:cy-4*u,w:cw,h:chh,fn:()=>{phone.sel=i;phoneKey('Enter');}});});
-    if(!G.big){ctx.font=Math.round(11*u)+'px '+FONT;ctx.fillStyle='rgba(255,255,255,.6)';ctx.fillText('ARROWS select  E open  C close',px+pw/2,sy+sh-20*u);}}
+    if(!G.big){ctx.font=Math.round(11*u)+'px '+FONT;ctx.fillStyle='rgba(255,255,255,.6)';ctx.fillText('ARROWS select  '+KL('interact')+' open  '+KL('phone')+' close',px+pw/2,sy+sh-20*u);}}
   else{const v=phoneView(),a=APPS.find(x=>x.id===phone.app)||APPS.find(x=>x.id==='system');const hy=sy+22*u;ctx.fillStyle=a.col;ctx.fillRect(sx,hy,sw,hdrH);ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='bold '+Math.round(17*u)+'px '+FONT;outline('\u2039 '+v.title,sx+10*u,hy+hdrH/2,'#fff',3*u);
     if(G.big){ctx.textAlign='right';ctx.font='bold '+Math.round(11*u)+'px '+FONT;outline('BACK',sx+sw-62*u,hy+hdrH/2,'#fff',2*u);}ctx.textBaseline='top';
     uiRects.push({tag:'back',x:sx,y:hy,w:G.big?sw-56*u:sw,h:hdrH,fn:()=>phoneKey('Backspace')});
@@ -1264,7 +1264,7 @@ function drawMenu(){const m=menu,u=U,mw=Math.min(W-40*u,(m.preview?720:540)*u),r
     uiRects.push({x:mx,y,w:lw,h:rowH,fn:()=>{if(menu.sel===i)activateMenuItem(i);else menu.sel=i;}});}
   if(n>vis){ctx.fillStyle='#888';ctx.font=Math.round(11*u)+'px '+FONT;ctx.fillText((off>0?'\u25b2 ':'')+(off+vis<n?'\u25bc more':''),mx+20*u,y0+vis*rowH);}
   const it=m.items[m.sel],note=it?(it.dis&&it.why?it.why:it.note):'';ctx.font=Math.round(13*u)+'px '+FONT;ctx.fillStyle=it&&it.dis?'#f99':'#bcd';ctx.fillText(note||m.note||'',mx+18*u,my+mh-46*u);
-  ctx.fillStyle='rgba(255,255,255,.55)';ctx.font=Math.round(12*u)+'px '+FONT;ctx.fillText(TOUCHUI?'Tap to select, tap again or OK to '+(m.garage||interior?'buy':'choose')+'. Drag to scroll.':'W/S or click: select    E/ENTER: '+(m.garage||interior?'buy':'choose')+'    ESC: leave',mx+18*u,my+mh-24*u);
+  ctx.fillStyle='rgba(255,255,255,.55)';ctx.font=Math.round(12*u)+'px '+FONT;ctx.fillText(TOUCHUI?'Tap to select, tap again or OK to '+(m.garage||interior?'buy':'choose')+'. Drag to scroll.':KL('up')+'/'+KL('down')+' or click: select    '+KL('interact')+'/ENTER: '+(m.garage||interior?'buy':'choose')+'    ESC: leave',mx+18*u,my+mh-24*u);
   if(m.preview){const px=mx+mw*.8,py=my+mh*.45;ctx.fillStyle='rgba(255,255,255,.06)';ctx.fillRect(mx+mw*.62,my+70*u,mw*.36,mh-130*u);let ov={outfit:(it&&it.outfit)||player.outfit};
     drawBigPlayer(px,py,11*u,Object.assign({gun:false,handsUp:false,walk:0},ov));ctx.textAlign='center';ctx.font='bold '+Math.round(12*u)+'px '+FONT;outline('PREVIEW',px,py+80*u,'#fff',2*u);}
   ctx.restore();}
@@ -1278,8 +1278,7 @@ function drawTitle(){const u=U;ctx.save();ctx.fillStyle='rgba(0,0,10,.55)';ctx.f
   ctx.font='bold italic '+Math.round(90*u)+'px '+FONT;for(let i=6;i>0;i--){ctx.fillStyle=i%2?'#10307a':'#00b0ff';ctx.fillText('AUTO',W/2+i*2*u,ty+78*u+i*2*u);}outline('AUTO',W/2,ty+78*u,'#fff',8*u);
   ctx.font='bold '+Math.round(22*u)+'px '+FONT;outline('ALPHA',W/2+150*u,ty+60*u,'#ff3cbe',4*u);
   ctx.font='bold '+Math.round(15*u)+'px '+FONT;outline('~ A TOP-DOWN CRIME CAPER IN THE SPIRIT OF GTA2 ~',W/2,ty+135*u,'#9ef',3*u);
-  const lines=TOUCHUI?TOUCH_TITLE:[['WASD / ARROWS','Walk / Drive'],['MOUSE','Aim (click to attack)'],['SPACE','Attack on foot / Handbrake'],['SHIFT','Sprint / Nitro'],['E','Interact: cars, doors, buy, pick locks'],['R','Rob / mug / kick a door in'],
-    ['C / I','Phone / Inventory (stolen goods)'],['Q / TAB / 1-7','Switch weapon (1 = fists)'],['P / M','Pause / Mute']];
+  const lines=TOUCHUI?TOUCH_TITLE:titleKeyLines();
   ctx.font='bold '+Math.round(15*u)+'px '+FONT;const lh=23*u,y0=ty+175*u,bh=lines.length*lh+18*u;ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(W/2-300*u,y0-20*u,600*u,bh);ctx.strokeStyle='#ffd23a';ctx.lineWidth=2*u;ctx.strokeRect(W/2-300*u,y0-20*u,600*u,bh);
   lines.forEach((l,i)=>{ctx.textAlign='right';outline(l[0],W/2-20*u,y0+i*lh,'#ffd23a',3*u);ctx.textAlign='left';outline(l[1],W/2+10*u,y0+i*lh,'#fff',3*u);});
   ctx.textAlign='center';const sv=hasSave();if(Math.floor(gtime*2.5)%2){ctx.font='bold '+Math.round(24*u)+'px '+FONT;outline(TOUCHUI?(sv?'TAP  CONTINUE  OR  NEW GAME':'TAP TO START'):sv?'ENTER: CONTINUE    N: NEW GAME':'PRESS ENTER OR CLICK TO START',W/2,y0+bh+16*u,'#fff',5*u);}
@@ -1527,7 +1526,7 @@ function buildRoom3(o){const t=o.type;const r={poi:o,type:t,w:340,h:230,props:[]
 function npc3(n,r,dt){if(n.role!=='resident')return false;const p=player,d=Math.hypot(p.x-n.x,p.y-n.y);
   const wake=()=>{if(n.state!=='idle'&&n.state!=='tv')return;n.sleep=false;n.a=Math.atan2(p.y-n.y,p.x-n.x);
     if(n.brave){n.state='fight';n.hostile=true;msg(n.gunR?'"GET OUT OF MY HOUSE!" (THEY HAVE A GUN)':'"I\'LL KILL YOU!"','#f66',2);if(n.gunR)n.gun=true;}
-    else{n.state='call';n.calling=4;msg('THE RESIDENT IS CALLING 911! STOP THEM (R)','#f66',2.5);}};
+    else{n.state='call';n.calling=4;msg('THE RESIDENT IS CALLING 911! STOP THEM ('+KL('rob')+')','#f66',2.5);}};
   if((n.state==='idle'||n.state==='tv')&&n.hp<(n.hp0||40)){wake();return true;}
   if(n.state==='idle'||n.state==='tv'){if(n.sleep){if(r.noise>45||(d<26&&R()<dt*.3))wake();}
     else{const ang=Math.abs(angDiff(Math.atan2(p.y-n.y,p.x-n.x),n.a));if(r.noise>25||(d<150&&(ang<1.3||d<40)))wake();}return true;}
@@ -1659,7 +1658,7 @@ function bagView(v){const p=player,sum=p.inv.reduce((s,x)=>s+x.val,0);v.title='B
   v.lines.push('CARRYING '+carryW()+'/'+carryCap()+' kg   ~$'+Math.round(sum*.6),'Tools: '+([tools.lockpick&&'lockpick set',tools.bag&&'duffel bag'].filter(Boolean).join(', ')||'none'),'Stash: $'+stash.cash+', '+stash.items.length+' item(s)');
   if(!p.inv.length)v.lines.push('','Empty. Rob houses (h on the map) and sell at pawn shops (P).');
   p.inv.forEach((x,i)=>v.items.push({label:x.name,right:x.hotT>0?'HOT':'',sub:x.w+' kg  ~$'+Math.round(x.val*.6)+(x.hotT>0?'  (hot '+Math.ceil(x.hotT/60)+'m)':''),act:()=>{p.inv.splice(i,1);msg('DROPPED '+x.name.toUpperCase(),'#aaa',1);phone.sel=Math.max(0,phone.sel-1);}}));
-  if(p.inv.length)v.foot.push('ENTER: drop item.  I: close');}
+  if(p.inv.length)v.foot.push('ENTER: drop item.  '+KL('bag')+': close');}
 
 // ---------------- prompts ----------------
 function poiPrompt3(o,d,cand){
@@ -1674,7 +1673,7 @@ function interiorPrompt3(cand){const r=interior;for(const n of r.npcs){if(n.role
 
 // ---------------- HUD ----------------
 function drawHUD3(){if(state==='title')return;const u=U,p=player;ctx.save();ctx.textBaseline='top';ctx.lineJoin='round';
-  if(p.inv.length){const HL=hudLayout();ctx.textAlign='left';ctx.font='bold '+Math.round(HL.f(12))+'px '+FONT;outline('BAG '+carryW()+'/'+carryCap()+' kg  '+p.inv.length+' item'+(p.inv.length>1?'s':'')+(TOUCHUI?'':'  [I]'),HL.bx+2*u,HL.bagY,'#ffd080',3*u);}
+  if(p.inv.length){const HL=hudLayout();ctx.textAlign='left';ctx.font='bold '+Math.round(HL.f(12))+'px '+FONT;outline('BAG '+carryW()+'/'+carryCap()+' kg  '+p.inv.length+' item'+(p.inv.length>1?'s':'')+(TOUCHUI?'':'  ['+KL('bag')+']'),HL.bx+2*u,HL.bagY,'#ffd080',3*u);}
   if(p.pick)bar(W/2-150*u,H*.3,300*u,16*u,p.pick.t/p.pick.dur,'#ffd040','#332','PICKING THE LOCK...');
   const r=interior;if(r&&r.type==='house'){bar(W/2-110*u,H*.2,220*u,12*u,r.noise/100,r.noise>70?'#f44':r.noise>40?'#fa0':'#4c4','#222','NOISE');
     if(r.alarmT>0){ctx.textAlign='center';ctx.font='bold '+Math.round(22*u)+'px '+FONT;outline('ALARM IN '+Math.ceil(r.alarmT)+'s',W/2,H*.2+18*u,Math.floor(gtime*4)%2?'#f44':'#fff',4*u);}
@@ -2374,5 +2373,153 @@ function routePts(t){const s={x:focus.x,y:focus.y},a=nearestNode(s.x,s.y),b=near
 // never start on something solid / off the map
 startGame=(o=>function(...a){const r=o(...a);const p=player;if(p.x<8||p.y<8||p.x>WORLD-8||p.y>WORLD-8||solid(tileW(p.x,p.y))){const s={x:(5*P-1+.5)*T,y:(4*P+6+.5)*T};p.x=s.x;p.y=s.y;}return r;})(startGame);
 window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get roads(){return{NODES,VL,HL,N,CITYN,PASSES,OVERTAKES,REDRUNS,lightState,isRuralT,districtAt,nodeAt:k=>NODEAT[k]};}}));
+
+// ======================================================================
+//  v4k: keyboard remapping (phone > System > Controls) + basic gamepad
+//  Game logic keeps reading "canonical" codes (keys.KeyW, onPress('KeyE')...);
+//  physical keys are translated through the bindings here. Touch is untouched.
+// ======================================================================
+const KB_KEY='pta_keys';
+const KB_ACTIONS=[
+  {id:'up',label:'Up / accelerate',canon:'KeyW',def:['KeyW','ArrowUp']},
+  {id:'down',label:'Down / reverse',canon:'KeyS',def:['KeyS','ArrowDown']},
+  {id:'left',label:'Left / steer left',canon:'KeyA',def:['KeyA','ArrowLeft']},
+  {id:'right',label:'Right / steer right',canon:'KeyD',def:['KeyD','ArrowRight']},
+  {id:'attack',label:'Attack / handbrake',canon:'Space',def:['Space',null]},
+  {id:'sprint',label:'Sprint / nitro',canon:'ShiftLeft',def:['ShiftLeft','ShiftRight']},
+  {id:'interact',label:'Interact / car in-out',canon:'KeyE',def:['KeyE','KeyF']},
+  {id:'rob',label:'Rob / mug / kick door',canon:'KeyR',def:['KeyR',null]},
+  {id:'phone',label:'Phone',canon:'KeyC',def:['KeyC',null],must:1},
+  {id:'bag',label:'Inventory (bag)',canon:'KeyI',def:['KeyI',null]},
+  {id:'wnext',label:'Next weapon',canon:'KeyQ',def:['KeyQ','Tab']},
+  {id:'wprev',label:'Previous weapon',canon:'WeapPrev',def:['KeyZ',null]},
+  ...[1,2,3,4,5,6,7].map(n=>({id:'w'+n,label:'Weapon '+n+(n===1?' (fists)':''),canon:'Digit'+n,def:['Digit'+n,'Numpad'+n]})),
+  {id:'pause',label:'Pause',canon:'KeyP',def:['KeyP',null]},
+  {id:'mute',label:'Mute sound',canon:'KeyM',def:['KeyM',null]}];
+const KB_BY={},KB_IDX={};KB_ACTIONS.forEach((a,i)=>{KB_BY[a.id]=a;KB_IDX[a.id]=i;});
+const KB_RESERVED=new Set(['Escape','MetaLeft','MetaRight','OSLeft','OSRight','ContextMenu','Fn','F11','F12']);
+const KB_UI_RAW=new Set(['Escape','Enter','NumpadEnter','Backspace','ArrowUp','ArrowDown','ArrowLeft','ArrowRight']);
+const KB_FALLBACK=['KeyC','KeyH','KeyJ','KeyK','KeyL','KeyU','KeyO','KeyY','KeyT','KeyG','KeyB','KeyN','KeyV','KeyX'];
+const kbOkCode=c=>typeof c==='string'&&/^[A-Za-z][A-Za-z0-9]{0,23}$/.test(c)&&!KB_RESERVED.has(c);
+function kbDefaults(){const b={};for(const a of KB_ACTIONS)b[a.id]=a.def.slice();return b;}
+// load + validate (like the Display prefs: anything odd falls back to defaults, never throws)
+function kbLoad(){let o=null;try{o=JSON.parse(localStorage.getItem(KB_KEY)||'null');}catch(e){o=null;}
+  const src=(o&&typeof o==='object'&&o.v===1&&o.b&&typeof o.b==='object'&&!Array.isArray(o.b))?o.b:{};const b={},used=new Set();
+  // user-set entries claim their keys first, then defaults fill missing actions
+  const order=[...KB_ACTIONS.filter(a=>Array.isArray(src[a.id])),...KB_ACTIONS.filter(a=>!Array.isArray(src[a.id]))];
+  for(const a of order){const raw=Array.isArray(src[a.id])?src[a.id]:a.def;let v=[0,1].map(i=>kbOkCode(raw[i])&&!used.has(raw[i])?raw[i]:null);
+    if(v[0]===v[1])v[1]=null;if(!v[0]&&v[1]){v[0]=v[1];v[1]=null;}
+    if(!v[0]&&a.must)v[0]=[...a.def,...KB_FALLBACK].find(c=>c&&!used.has(c))||null;
+    for(const c of v)if(c)used.add(c);b[a.id]=v;}
+  return b;}
+const KB={b:kbLoad(),map:{},phys:{},cap:null,note:'',swallow:{}};
+function kbRebuild(){KB.map={};for(const a of KB_ACTIONS)for(const c of KB.b[a.id])if(c)(KB.map[c]=KB.map[c]||[]).push(a.id);}
+kbRebuild();
+function kbSave(){try{localStorage.setItem(KB_KEY,JSON.stringify({v:1,b:KB.b}));}catch(e){}}
+// human names for codes
+const KB_NAMES={Space:'SPACE',ShiftLeft:'SHIFT',ShiftRight:'R-SHIFT',ControlLeft:'CTRL',ControlRight:'R-CTRL',AltLeft:'ALT',AltRight:'R-ALT',Tab:'TAB',Enter:'ENTER',NumpadEnter:'NUM ENTER',
+  Backspace:'BKSP',CapsLock:'CAPS',ArrowUp:'\u25b2',ArrowDown:'\u25bc',ArrowLeft:'\u25c0',ArrowRight:'\u25b6',Minus:'-',Equal:'=',BracketLeft:'[',BracketRight:']',Semicolon:';',Quote:"'",
+  Comma:',',Period:'.',Slash:'/',Backslash:'\\',Backquote:'`',Insert:'INS',Delete:'DEL',Home:'HOME',End:'END',PageUp:'PGUP',PageDown:'PGDN',WeapPrev:'-'};
+function KN(c){if(!c)return'\u2014';if(KB_NAMES[c])return KB_NAMES[c];let m;if((m=/^Key([A-Z])$/.exec(c)))return m[1];if((m=/^Digit(\d)$/.exec(c)))return m[1];if((m=/^Numpad(.+)$/.exec(c)))return'NUM '+m[1].toUpperCase();
+  return c.replace(/(Left|Right)$/,'').toUpperCase().slice(0,8);}
+function KL(id){const a=KB.b[id];return a&&a[0]?KN(a[0]):'\u2014';}
+function kbPair(id){const a=KB.b[id];return KN(a[0])+(a[1]?' / '+KN(a[1]):'');}
+function kbNorm(id){const v=KB.b[id];if(!v[0]&&v[1]){v[0]=v[1];v[1]=null;}if(v[0]&&v[0]===v[1])v[1]=null;}
+// bind code to (id, slot); conflicts are swapped (the other action gets our old key) and reported
+function kbAssign(id,slot,code){const a=KB_BY[id];if(!a)return false;
+  if(!kbOkCode(code)){KB.note=KN(code)+' is reserved (Esc always pauses / closes).';msg(KB.note.toUpperCase(),'#f88',1.6);return false;}
+  const cur=KB.b[id][slot];if(cur===code){KB.note='No change.';return true;}let note='';
+  for(const o of KB_ACTIONS)for(const s of[0,1]){if(o.id===id&&s===slot)continue;if(KB.b[o.id][s]!==code)continue;
+    if(o.id===id){KB.b[id][s]=cur;note='Swapped primary and secondary.';continue;}
+    const left=KB.b[o.id][1-s];
+    if(o.must&&!cur&&!left){KB.note=KN(code)+' is the only '+o.label+' key - give it another key first.';msg(KB.note.toUpperCase(),'#f88',2);return false;}
+    KB.b[o.id][s]=cur;kbNorm(o.id);note=KN(code)+' was on "'+o.label+'"'+(cur?' - swapped, it now uses '+KN(cur)+'.':' - removed from it.');}
+  KB.b[id][slot]=code;kbNorm(id);kbRebuild();kbSave();KB.note=note||(a.label+': '+KN(code)+'.');if(note)msg('KEY CONFLICT: SWAPPED','#ffd23a',1.6);else msg(a.label.toUpperCase()+': '+KN(code),'#8f8',1.2);
+  return true;}
+function kbClear(id,slot){const a=KB_BY[id];if(!a)return;if(slot===0&&a.must&&!KB.b[id][1]){KB.note='The phone always needs a key.';return;}KB.b[id][slot]=null;kbNorm(id);kbRebuild();kbSave();KB.note='Cleared.';}
+function kbResetAction(id){const a=KB_BY[id];const nv=[null,null];
+  a.def.forEach((c,i)=>{if(!c)return;for(const o of KB_ACTIONS){if(o.id===id)continue;const v=KB.b[o.id];for(const s of[0,1])if(v[s]===c){if(o.must&&!v[1-s])return;v[s]=null;kbNorm(o.id);}}
+    if(!KB_ACTIONS.some(o=>o.id!==id&&KB.b[o.id].includes(c)))nv[i]=c;});
+  KB.b[id]=nv;kbNorm(id);if(!KB.b[id][0]&&a.must)KB.b[id]=a.def.slice();kbRebuild();kbSave();KB.note=a.label+' reset.';}
+function kbReset(){KB.b=kbDefaults();KB.cap=null;kbRebuild();kbSave();KB.note='All keys back to defaults.';}
+function kbStartCapture(id,slot){KB.cap={id,slot,t:performance.now()};KB.note='';}
+function kbCancel(why){KB.cap=null;KB.note=why||'Cancelled - nothing changed.';}
+// ---------------- keyboard event translation ----------------
+function kbUiCtx(){return state!=='play'||!!menu||!!phone.open||!!fade;}
+function kbDown(e){const code=e.code;if(!code)return;
+  if(KB.cap){e.preventDefault();if(e.repeat)return;if(code==='Escape')kbCancel();else if(kbAssign(KB.cap.id,KB.cap.slot,code))KB.cap=null;else KB.cap=null;KB.swallow[code]=1;KB.phys[code]=true;return;}
+  const acts=KB.map[code]||[];
+  if(acts.length||code==='Space'||code==='Tab'||/^Arrow/.test(code)||code==='Backspace')e.preventDefault();
+  if(KB.phys[code])return;KB.phys[code]=true;
+  if(state==='title'||state==='over'){onPress(code);return;}
+  if(code==='Escape'||(kbUiCtx()&&KB_UI_RAW.has(code))){onPress(code==='NumpadEnter'?'Enter':code);return;}
+  if(!acts.length){if(code==='Enter'||code==='NumpadEnter')onPress('Enter');return;}// legacy: Enter = interact
+  for(const id of acts){const c=KB_BY[id].canon,was=keys[c];keys[c]=true;if(!was||c==='WeapPrev')onPress(c);}}
+function kbUp(e){const code=e.code;if(!code)return;KB.phys[code]=false;if(KB.swallow[code]){delete KB.swallow[code];return;}
+  for(const id of KB.map[code]||[]){const c=KB_BY[id].canon;keys[c]=KB.b[id].some(k=>k&&KB.phys[k])||!!(GP.held&&GP.held[c]);}}
+addEventListener('blur',()=>{KB.phys={};KB.swallow={};});
+onPress=(o=>function(code){if(code==='WeapPrev'){if(state==='play'&&!menu&&!phone.open&&!fade){const p=player;for(let i=1;i<=7;i++){const n=(p.wp-i+70)%7;if(p.ammo[n]>0){p.wp=n;return;}}}return;}return o(code);})(onPress);
+// ---------------- phone screens ----------------
+function kbSysIdx(){const v=phoneViewBase('system');return Math.max(0,v.items.findIndex(it=>/^Controls/.test(it.label)));}
+const phoneViewBase=a=>{const s=phone.app;phone.app=a;const v=phoneView();phone.app=s;return v;};
+function kbView(v){if(phone.app==='keys'){v.title='CONTROLS';
+    v.lines.push(TOUCHUI?'Keyboard keys (touch uses the on-screen buttons).':'Pick an action to change its keys. Esc closes.');if(KB.note)v.lines.push(KB.note);
+    KB_ACTIONS.forEach(a=>v.items.push({label:a.label,right:kbPair(a.id),act:()=>{phone.app='keybind';phone.kbAct=a.id;phone.sel=0;KB.note='';}}));
+    v.items.push({label:'Reset all to defaults',act:()=>{kbReset();msg('CONTROLS RESET','#8cf',1.4);}});
+    v.items.push({label:'\u2039 Back to System',act:()=>{phone.app='system';phone.sel=kbSysIdx();}});
+    v.foot.push('Saved on this device.  Mouse aims + fires.',gpStatus());return;}
+  const a=KB_BY[phone.kbAct]||KB_ACTIONS[0],b=KB.b[a.id];v.title='SET KEYS';
+  if(KB.cap&&performance.now()-KB.cap.t>12000)kbCancel('No key pressed - cancelled.');
+  v.lines.push(a.label.toUpperCase(),'Primary:    '+KN(b[0]),'Secondary:  '+(b[1]?KN(b[1]):'(none)'));
+  if(KB.cap){v.lines.push('','>>> PRESS A KEY FOR '+(KB.cap.slot?'SECONDARY':'PRIMARY')+' <<<','Esc cancels.');v.items.push({label:'Cancel',act:()=>kbCancel()});return;}
+  if(KB.note)v.lines.push(KB.note);
+  v.items.push({label:'Change primary key',right:KN(b[0]),act:()=>kbStartCapture(a.id,0)});
+  v.items.push({label:'Change secondary key',right:b[1]?KN(b[1]):'',act:()=>kbStartCapture(a.id,1)});
+  if(b[1])v.items.push({label:'Clear secondary key',act:()=>kbClear(a.id,1)});
+  v.items.push({label:'Reset this action',right:a.def.filter(Boolean).map(KN).join(' / '),act:()=>kbResetAction(a.id)});
+  v.items.push({label:'\u2039 Back to Controls',act:()=>{phone.app='keys';phone.sel=KB_IDX[a.id];KB.note='';}});
+  v.foot.push('Taken keys are swapped, not lost.');}
+phoneView=(o=>function(){const a=phone.app;if(a==='keys'||a==='keybind'){const v={title:'CONTROLS',lines:[],items:[],foot:[]};kbView(v);return v;}
+  const v=o();if(a==='system'){const i=v.items.findIndex(it=>/^Display/.test(it.label));v.items.splice(i+1,0,{label:'Controls / key bindings  \u203a',right:'',act:()=>{phone.app='keys';phone.sel=0;KB.note='';}});}return v;})(phoneView);
+phoneKey=(o=>function(code){
+  if(KB.cap){kbCancel();return;}// only taps / clicks / wheel get here while capturing; they cancel
+  if(code==='Escape'){phone.open=false;return;}// Esc always closes the phone
+  if(code==='Backspace'&&(phone.app==='keys'||phone.app==='keybind')){if(phone.app==='keybind'){phone.app='keys';phone.sel=KB_IDX[phone.kbAct]||0;}else{phone.app='system';phone.sel=kbSysIdx();}KB.note='';return;}
+  return o(code);})(phoneKey);
+// title-screen controls list from the live bindings
+function titleKeyLines(){const P=id=>KB.b[id][0],S=id=>KB.b[id][1],mv=['up','left','down','right'];
+  const def=mv.every(id=>P(id)===KB_BY[id].def[0]),arr=mv.every(id=>S(id)===KB_BY[id].def[1]);
+  const prim=def?'WASD':mv.map(id=>KN(P(id))).join(' '),sec=arr?'ARROWS':mv.some(S)?mv.map(id=>KN(S(id))).join(' '):'';
+  const two=id=>KN(P(id))+(S(id)?' / '+KN(S(id)):''),wdef=[1,2,3,4,5,6,7].every(n=>P('w'+n)==='Digit'+n);
+  return[[prim+(sec?' / '+sec:''),'Walk / Drive'],['MOUSE','Aim (click to attack)'],[two('attack'),'Attack on foot / Handbrake'],[two('sprint'),'Sprint / Nitro'],[two('interact'),'Interact: cars, doors, buy, pick locks'],[two('rob'),'Rob / mug / kick a door in'],
+    [KL('phone')+' / '+KL('bag'),'Phone / Inventory (stolen goods)'],[KL('wnext')+' / '+KL('wprev')+(wdef?' / 1-7':''),'Next / prev weapon'+(wdef?' (1 = fists)':'')],[KL('pause')+' / '+KL('mute'),'Pause / Mute'],['PHONE > SYSTEM','Controls: change your keys']];}
+function hintBarText(){return KL('interact')+': interact   '+KL('rob')+': rob/mug   '+KL('phone')+': phone   '+KL('wnext')+': weapon   '+KL('sprint')+': sprint';}
+// prompt key badge (E / R slots show the bound key; long names get a wider badge)
+function kbBadge(k,u){const kk=KL(k==='R'?'rob':'interact'),f=ctx.font;ctx.font='bold '+Math.round((kk.length>2?10:16)*u)+'px '+FONT;const w=Math.max(22*u,ctx.measureText(kk).width+8*u);ctx.font=f;return{kk,w,ex:w-22*u,fs:'bold '+Math.round((kk.length>2?10:16)*u)+'px '+FONT};}
+// ---------------- basic gamepad (standard mapping) ----------------
+// sticks / d-pad move, A interact (OK in menus), B rob (back in menus), X handbrake / attack, Y bag,
+// LB / RB prev / next weapon, LT sprint / nitro, RT fire, right stick aims, Back phone, Start pause / close.
+const GP={on:false,held:{},prevB:[],nav:{},navT:{},fire:false,id:''};
+function gpStatus(){return GP.on?'Gamepad: '+(GP.id||'connected').slice(0,26):'Gamepad: plug one in + press a button';}
+function gpPoll(){const list=navigator.getGamepads?navigator.getGamepads():[];let gp=null;for(const g of list||[])if(g&&g.connected){gp=g;break;}
+  if(!gp){if(GP.on){for(const c in GP.held)if(GP.held[c]){GP.held[c]=false;keys[c]=kbHeldCanon(c);}if(GP.fire){mouse.down=false;GP.fire=false;}}GP.on=false;return;}
+  GP.on=true;GP.id=gp.id;const ax=gp.axes||[],bt=i=>!!(gp.buttons[i]&&(gp.buttons[i].pressed||gp.buttons[i].value>.5)),ui=kbUiCtx();
+  const up=(ax[1]||0)<-.45||bt(12),dn=(ax[1]||0)>.45||bt(13),lf=(ax[0]||0)<-.45||bt(14),rt=(ax[0]||0)>.45||bt(15);
+  const held={KeyW:!ui&&up,KeyS:!ui&&dn,KeyA:!ui&&lf,KeyD:!ui&&rt,Space:!ui&&bt(2),ShiftLeft:!ui&&(bt(6)||bt(10))};
+  for(const c in held)if(held[c]!==!!GP.held[c]){GP.held[c]=held[c];keys[c]=held[c]||kbHeldCanon(c);}
+  const now=performance.now();
+  if(ui){for(const [k,on] of [['ArrowUp',up],['ArrowDown',dn],['ArrowLeft',lf],['ArrowRight',rt]]){if(on&&(!GP.nav[k]||now>GP.navT[k])){onPress(k);GP.navT[k]=now+(GP.nav[k]?120:380);}GP.nav[k]=on;}}else GP.nav={};
+  const edge=i=>bt(i)&&!GP.prevB[i];
+  if(state==='title'||state==='over'){if(edge(0)||edge(9))onPress('Enter');}
+  else{if(edge(0))onPress(ui?'Enter':'KeyE');if(edge(1))onPress(ui?'Backspace':'KeyR');if(edge(3))onPress('KeyI');if(edge(5))onPress('KeyQ');if(edge(4))onPress('WeapPrev');
+    if(edge(8))onPress('KeyC');if(edge(9))onPress(phone.open||menu?'Escape':'KeyP');}
+  // right stick aim + RT fire (same trick as the touch aim stick)
+  const rx=ax[2]||0,ry=ax[3]||0,rl=Math.hypot(rx,ry),fire=bt(7);
+  if(state==='play'&&!ui){if(rl>.3){const [sx,sy]=playerScreen(),d=170*DPRS;mouse.x=sx+rx/rl*d;mouse.y=sy+ry/rl*d;mouse.last=gtime;}
+    if(fire!==GP.fire){mouse.down=fire;GP.fire=fire;}}else if(GP.fire){mouse.down=false;GP.fire=false;}
+  GP.prevB=gp.buttons.map((b,i)=>bt(i));}
+function kbHeldCanon(c){for(const a of KB_ACTIONS)if(a.canon===c)return KB.b[a.id].some(k=>k&&KB.phys[k]);return false;}
+(function gpLoop(){try{if(GP.on||navigator.getGamepads&&[...(navigator.getGamepads()||[])].some(g=>g&&g.connected))gpPoll();}catch(e){}requestAnimationFrame(gpLoop);})();
+window.__game.kb={KB,KB_ACTIONS,assign:kbAssign,clear:kbClear,reset:kbReset,resetAction:kbResetAction,load:kbLoad,KN,KL,titleKeyLines,hintBarText,get cap(){return KB.cap;},GP,gpPoll};
 
 </script></body></html>
