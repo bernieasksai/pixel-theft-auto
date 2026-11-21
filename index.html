@@ -1309,7 +1309,7 @@ requestAnimationFrame(frame);
 
 
 // ---------- parking-lot security cameras ----------
-const CAM={fov:PI/2,range:290,sweep:70*PI/180,period:7,catchChance:.8,repair:150,share:.55};
+const CAM={fov:PI/2,range:290,sweep:70*PI/180,period:7,catchChance:.8,repair:150,share:.8};
 const cams=[];
 function genCams(){const rnd=mulberry32(4242),seen={},blocks=[];
   for(const s of lotSlots){const bx=Math.floor(s.x/T/P),by=Math.floor(s.y/T/P),k=bx+','+by;if(seen[k])continue;seen[k]=1;blocks.push([bx,by,rnd()]);}
@@ -2208,19 +2208,47 @@ function approaches(nd){const a=[];// [dir of travel INTO node, corner x, corner
   if(hi>0&&nd.H.lanes[0])a.push([0,nd.x0-7,nd.y1+7]);              // from west, heading east: south-west corner
   if(hi<hN[nd.iy].length-1&&nd.H.lanes[2])a.push([2,nd.x1+7,nd.y0-7]);
   return a;}
-function drawRoadProps(){if(!V4READY)return;setWorld(.1);
-  for(const nd of NODES){if(nd.ctrl==='none')continue;if(nd.x1<vx0-30||nd.x0>vx1+30||nd.y1<vy0-30||nd.y0>vy1+30)continue;
-    if(!nd.ap)nd.ap=approaches(nd);
+// ---- street furniture: traffic lights on poles with a mast arm, stop signs on posts ----
+// Everything stands on the sidewalk corner (7px back from both curbs). Ground pass (base + shadow, before peds/cars),
+// then the raised parts. Raised points use the same parallax as buildings: drawn with setWorld(h), and the pole is the
+// segment between the ground point and its raised image, so the head is always visibly attached.
+const POLE_H=.13,SIGN_H=.09,SH_K=4/.07;// shadow length per unit height, matched to tree shadows (+4,+4 at h .07)
+function propVisible(nd){return nd.ctrl!=='none'&&!(nd.x1<vx0-40||nd.x0>vx1+40||nd.y1<vy0-40||nd.y0>vy1+40);}
+function lightGeom(d,x,y){// arm points across the approach lanes, reaching just past the curb
+  const ax=d===1?1:d===3?-1:0,ay=d===0?-1:d===2?1:0,L=12;return{px:x,py:y,hx:x+ax*L,hy:y+ay*L,ax,ay};}
+const raise=(x,y,h)=>[camX+(x-camX)*(1+h),camY+(y-camY)*(1+h)];
+function drawRoadPropsGround(){if(!V4READY)return;
+  for(const nd of NODES){if(!propVisible(nd))continue;if(!nd.ap)nd.ap=approaches(nd);
+    for(const [d,x,y] of nd.ap){const isL=nd.ctrl==='light',h=isL?POLE_H:SIGN_H,sh=h*SH_K;
+      g.fillStyle='rgba(0,0,0,.3)';g.strokeStyle='rgba(0,0,0,.3)';g.lineCap='round';
+      g.lineWidth=isL?2:1.4;g.beginPath();g.moveTo(x,y);g.lineTo(x+sh,y+sh);
+      if(isL){const G=lightGeom(d,x,y);g.lineTo(G.hx+sh,G.hy+sh);g.stroke();g.save();g.translate(G.hx+sh,G.hy+sh);if(G.ax)g.rotate(PI/2);g.fillRect(-3,-7,6,14);g.restore();}
+      else{g.stroke();g.beginPath();g.arc(x+sh,y+sh,5.5,0,TAU);g.fill();}
+      // base plate / footing on the sidewalk
+      g.fillStyle='#5a5a5e';g.beginPath();g.arc(x,y,isL?2.8:1.9,0,TAU);g.fill();g.fillStyle='#8a8a90';g.beginPath();g.arc(x-.5,y-.5,isL?1.6:1,0,TAU);g.fill();}}
+  g.lineCap='butt';}
+function drawRoadProps(){if(!V4READY)return;setWorld(0);g.lineCap='round';
+  for(const nd of NODES){if(!propVisible(nd))continue;if(!nd.ap)nd.ap=approaches(nd);
     for(const [d,x,y] of nd.ap){
-      if(nd.ctrl==='stop'){g.fillStyle='rgba(0,0,0,.35)';g.beginPath();g.arc(x+2,y+2,6.8,0,TAU);g.fill();g.fillStyle='#fff';g.beginPath();for(let k=0;k<8;k++){const a=k*PI/4+PI/8;g.lineTo(x+Math.cos(a)*7,y+Math.sin(a)*7);}g.fill();
-        g.fillStyle='#d01818';g.beginPath();for(let k=0;k<8;k++){const a=k*PI/4+PI/8;g.lineTo(x+Math.cos(a)*5.9,y+Math.sin(a)*5.9);}g.fill();g.fillStyle='#fff';g.font='bold 4.6px monospace';g.textAlign='center';g.textBaseline='middle';g.fillText('STOP',x,y+.3);continue;}
-      const st=lightState(nd,d===1||d===3),hor=d===0||d===2;g.save();g.translate(x,y);if(hor)g.rotate(PI/2);
-      g.fillStyle='rgba(0,0,0,.35)';g.fillRect(-3,-7,8,16);g.fillStyle='#1a1a1a';g.fillRect(-4,-8,8,16);g.strokeStyle='#e0c020';g.lineWidth=.8;g.strokeRect(-4,-8,8,16);
-      const cols=[['r','#ff3020','#401010'],['y','#ffc820','#403010'],['g','#30ff60','#103018']];
-      cols.forEach(([s,on,off],k)=>{const yy=-5+k*5;g.fillStyle=st===s?on:off;g.beginPath();g.arc(0,yy,1.9,0,TAU);g.fill();});
-      g.restore();
-      const on=st==='r'?'255,40,30':st==='y'?'255,200,30':'50,255,90';g.globalCompositeOperation='lighter';const gr=g.createRadialGradient(x,y,0,x,y,12);gr.addColorStop(0,'rgba('+on+',.45)');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(x-12,y-12,24,24);g.globalCompositeOperation='source-over';}}
+      if(nd.ctrl==='stop'){const [tx,ty]=raise(x,y,SIGN_H);g.strokeStyle="#55555a";g.lineWidth=1.8;g.beginPath();g.moveTo(x,y);g.lineTo(tx,ty);g.stroke();continue;}
+      const G=lightGeom(d,x,y),[tx,ty]=raise(x,y,POLE_H),[hx,hy]=raise(G.hx,G.hy,POLE_H);
+      g.strokeStyle='#3a3a3e';g.lineWidth=2.2;g.beginPath();g.moveTo(x,y);g.lineTo(tx,ty);g.stroke();// pole
+      g.strokeStyle='#4a4a50';g.lineWidth=1.5;g.beginPath();g.moveTo(tx,ty);g.lineTo(hx,hy);g.stroke();}}// mast arm
+  g.lineCap='butt';
+  // raised heads / sign plates
+  for(const nd of NODES){if(!propVisible(nd))continue;
+    for(const [d,x,y] of nd.ap){
+      if(nd.ctrl==='stop'){setWorld(SIGN_H);g.fillStyle='#fff';g.beginPath();for(let k=0;k<8;k++){const a=k*PI/4+PI/8;g.lineTo(x+Math.cos(a)*5.6,y+Math.sin(a)*5.6);}g.fill();
+        g.fillStyle='#d01818';g.beginPath();for(let k=0;k<8;k++){const a=k*PI/4+PI/8;g.lineTo(x+Math.cos(a)*4.7,y+Math.sin(a)*4.7);}g.fill();g.fillStyle='#fff';g.font='bold 3.7px monospace';g.textAlign='center';g.textBaseline='middle';g.fillText('STOP',x,y+.3);continue;}
+      setWorld(POLE_H);const G=lightGeom(d,x,y),st=lightState(nd,d===1||d===3);g.save();g.translate(G.hx,G.hy);if(G.ax)g.rotate(PI/2);
+      g.fillStyle='#1a1a1a';g.fillRect(-3.5,-7.5,7,15);g.strokeStyle='#e0c020';g.lineWidth=.7;g.strokeRect(-3.5,-7.5,7,15);
+      // red nearest the pole
+      const order=[['r','#ff3020','#401010'],['y','#ffc820','#403010'],['g','#30ff60','#103018']],sgn=(G.ax>0||G.ay<0)?-1:1;
+      order.forEach(([s,on,off],k)=>{const yy=sgn*(-4.8+k*4.8)*(G.ax?-1:1);g.fillStyle=st===s?on:off;g.beginPath();g.arc(0,yy,1.7,0,TAU);g.fill();
+        if(st===s){g.globalCompositeOperation='lighter';const gr=g.createRadialGradient(0,yy,0,0,yy,6);gr.addColorStop(0,'rgba('+(s==='r'?'255,40,30':s==='y'?'255,200,30':'50,255,90')+',.5)');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(-6,yy-6,12,12);g.globalCompositeOperation='source-over';}});
+      g.restore();}}
   setWorld(0);}
+drawPOIGround=(o=>function(){o();drawRoadPropsGround();})(drawPOIGround);
 
 // ---------------- v4t traffic AI: lanes, lights, stop signs, one-ways, passing ----------------
 const RIGHT=d=>(d+1)%4,LEFT=d=>(d+3)%4;
