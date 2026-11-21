@@ -2212,7 +2212,7 @@ function approaches(nd){const a=[];// [dir of travel INTO node, corner x, corner
 // with the same Pj()/setWorld(h) parallax as building walls (leans away from screen centre), lit N/W faces, shaded S/E.
 // Lights: mast arm level at the pole-top height out over the approach lanes, head = small 3D box with r/y/g lenses on top
 // and a glow toward oncoming cars. Stop signs: shorter post with the octagon on top. Footing + shadow in the ground pass.
-const HEAD_LEN=8.6,POLE_H=.05,SIGN_H=.038,PR=1.5,SR=1.1,ARM_L=14,HEAD_D=.014,SH_K=110;// heights ~0.4x a low building (h .1-.14)
+const HEAD_LEN=8.6,HEAD_ZH=.028,POLE_H=.05,SIGN_H=.038,PR=1.5,SR=1.1,ARM_L=14,HEAD_D=.014,SH_K=110;// heights ~0.4x a low building (h .1-.14)
 function propVisible(nd){return nd.ctrl!=='none'&&!(nd.x1<vx0-60||nd.x0>vx1+60||nd.y1<vy0-60||nd.y0>vy1+60);}
 function lightGeom(d,x,y){const ax=d===1?1:d===3?-1:0,ay=d===0?-1:d===2?1:0;
   const fx=d===0?-1:d===2?1:0,fy=d===1?-1:d===3?1:0;return{hx:x+ax*ARM_L,hy:y+ay*ARM_L,ax,ay,fx,fy};}
@@ -2227,7 +2227,7 @@ function drawRoadPropsGround(){if(!V4READY)return;g.lineCap='round';
     for(const [d,x,y] of nd.ap){const isL=nd.ctrl==='light',o=(isL?POLE_H:SIGN_H)*SH_K;g.fillStyle=g.strokeStyle='rgba(0,0,0,.28)';
       g.lineWidth=isL?PR*2:SR*2;g.beginPath();g.moveTo(x,y);g.lineTo(x+o,y+o);g.stroke();
       if(isL){const G=lightGeom(d,x,y);g.lineWidth=1.8;g.beginPath();g.moveTo(x+o,y+o);g.lineTo(G.hx+o,G.hy+o);g.stroke();
-        g.save();g.transform(G.fy,-G.fx,G.fx,G.fy,G.hx+o,G.hy+o);g.beginPath();g.moveTo(-3.4,-1.3);g.lineTo(3.4,-1.3);g.lineTo(2.3,HEAD_LEN);g.lineTo(-2.3,HEAD_LEN);g.fill();g.restore();}
+        g.save();g.transform(G.fy,-G.fx,G.fx,G.fy,G.hx+o,G.hy+o);g.fillRect(-3,-1.8,6,3.6+HEAD_ZH*SH_K);g.restore();}
       else{const fx=d===0?-1:d===2?1:0,fy=d===1?-1:d===3?1:0;g.save();g.transform(fy,-fx,fx,fy,x+o,y+o);g.fillRect(-7,-1,14,12);g.restore();}
       g.fillStyle='#55555a';g.beginPath();g.arc(x,y,isL?3.4:2.4,0,TAU);g.fill();g.fillStyle='#7c7c82';g.beginPath();g.arc(x-.4,y-.4,isL?2.2:1.5,0,TAU);g.fill();}}
   g.lineCap='butt';}
@@ -2249,35 +2249,34 @@ function drawRoadProps(){if(!V4READY)return;
       g.fillStyle='#8c8c92';g.save();g.translate(0,-1.3);oct(7,SY);g.restore();// plate thickness / back edge (upright plate)
       g.fillStyle='#fff';oct(7,SY);g.fillStyle='#d01818';oct(6,SY);
       g.scale(1,SY);g.fillStyle='#fff';g.font='bold 4.6px monospace';g.textAlign='center';g.textBaseline='middle';g.fillText('STOP',0,.4);g.restore();continue;}
+    // ---- v4p3d: the whole light is a true 3D model projected with Pj() (the building projection): pole box z 0..POLE_H,
+    // arm box at the top, head box hanging under the arm end. Only camera-facing walls are drawn (building rule), so the
+    // look changes with screen position: near the centre you see mostly the lid; off to the traffic side you see the
+    // lens face; from behind you see the back of the housing. Lenses are mapped onto the projected face as ellipses.
     const G=lightGeom(d,x,y),st=lightState(nd,d===1||d===3);
     box3(x-PR,y-PR,x+PR,y+PR,0,POLE_H,'#5a5a62','#26262a','#4c4c54','#303036','#6a6a72');// pole column + cap
-    const aw=.9,ax0=Math.min(x,G.hx)-(G.ax?0:aw),ax1=Math.max(x,G.hx)+(G.ax?0:aw),ay0=Math.min(y,G.hy)-(G.ay?0:aw),ay1=Math.max(y,G.hy)+(G.ay?0:aw);
-    box3(ax0,ay0,ax1,ay1,POLE_H-.006,POLE_H,'#505058','#2a2a2e','#45454c','#2e2e33','#5e5e66');// level mast arm
-    // head: housing hangs under the arm end, thin across the arm, its lens face turned 90deg to look down the street
-    // at oncoming cars. The vertical face (red top, green bottom) is shown tipped toward that traffic, so from above the
-    // lenses run along the street: red next to the housing, then yellow, then green farthest out.
-    // head (v4r3): sized to ~half the crosswalk (crosswalk stripes are 20px along the street -> head <=10px).
-    // A small lid sliver at the arm end, then the r/y/g face tilted toward the viewer/oncoming lane drawn as a true
-    // trapezoid: wide at the top (nearest the arm, highest, closest to the camera), narrower at the bottom; lenses and
-    // their spacing taper too. Every face vertex is projected with Pj() at a height falling from the arm height toward
-    // the bottom of the head, the same parallax as the pole lean.
-    const ht=POLE_H+.002,DROP=.022,L=HEAD_LEN,TW=3.1,BW=1.9,LID=1.0;
-    const ux=fy,uy=-fx,P3=(lx,ly)=>{const hh=ht-DROP*Math.max(0,ly)/L;return Pj(G.hx+lx*ux+ly*fx,G.hy+lx*uy+ly*fy,hh);};
-    const sk=(hh)=>S*(1+hh);g.setTransform(1,0,0,1,0,0);
-    const poly=(pts,c)=>{g.fillStyle=c;g.beginPath();for(const [lx,ly] of pts){const q=P3(lx,ly);g.lineTo(q[0],q[1]);}g.fill();};
-    poly([[-TW-.3,-LID],[TW+.3,-LID],[TW+.3,0],[-TW-.3,0]],'#4a4a50');// lid sliver (top of the housing, at the wide end)
-    poly([[-TW-.5,0],[TW+.5,0],[BW+.5,L+.4],[-BW-.5,L+.4]],'#000');// backplate edge
-    poly([[-TW,0],[TW,0],[BW,L],[-BW,L]],'#e0c020');// gold rim
-    poly([[-TW+.55,.5],[TW-.55,.5],[BW-.45,L-.45],[-BW+.45,L-.45]],'#17171a');// face
-    poly([[-TW-.5,0],[-TW,0],[-BW,L],[-BW-.5,L+.4]],'#2e2e34');// thin side wall showing box depth
-    const LN=[['r','255,48,32','#3a0e0e',1.95,1.32],['y','255,200,32','#3a2c0c',4.7,1.12],['g','48,255,96','#0c2c14',7.1,.92]];
-    for(const [s0,on,off,ly,r0] of LN){const q=P3(0,ly),hh=ht-DROP*ly/L,r=r0*sk(hh),lit=st===s0;
-      g.fillStyle=lit?'rgb('+on+')':off;g.beginPath();g.arc(q[0],q[1],r,0,TAU);g.fill();
-      const v=P3(0,ly-r0*.95),dx=v[0]-q[0],dy=v[1]-q[1],an=Math.atan2(dy,dx);// hood on the top side of each lens
-      g.strokeStyle='#050505';g.lineWidth=Math.max(1,r*.35);g.beginPath();g.arc(q[0],q[1],r*1.05,an-1.1,an+1.1);g.stroke();
-      if(lit){g.fillStyle='rgba(255,255,255,.6)';g.beginPath();g.arc(q[0]-r*.3,q[1]-r*.3,r*.33,0,TAU);g.fill();}}
-    setWorld(ht);const k=st==='r'?0:st==='y'?1:2,on=LN[k][1],t=L+3,gx=G.hx+fx*t,gy=G.hy+fy*t;// smaller glow toward oncoming cars
-    g.globalCompositeOperation='lighter';const gr=g.createRadialGradient(gx,gy,0,gx,gy,6.5);gr.addColorStop(0,'rgba('+on+',.4)');gr.addColorStop(1,'rgba(0,0,0,0)');
+    const hT=POLE_H-.005,hB=hT-HEAD_ZH,hw=3.3,hd=2;// head: 6 across x 3.6 deep, z span HEAD_ZH
+    const hx0=G.hx-(G.fx?hd:hw),hx1=G.hx+(G.fx?hd:hw),hy0=G.hy-(G.fy?hd:hw),hy1=G.hy+(G.fy?hd:hw);
+    // wall colours: the lens face is dark with a gold rim; other walls are the housing (lit N/W, shaded S/E like buildings)
+    const FC='#1a1a1c',cN=fy<0?FC:'#b09414',cS=fy>0?FC:'#5e500a',cW=fx<0?FC:'#9a8212',cE=fx>0?FC:'#6a5a0c';// yellow housing
+    box3(hx0,hy0,hx1,hy1,hB,hT,cN,cS,cW,cE,'#d4b41c');
+    const faceVis=fy<0?camY<hy0:fy>0?camY>hy1:fx<0?camX<hx0:camX>hx1;
+    const k=st==='r'?0:st==='y'?1:2,LC=[['255,48,32','#3a0e0e',1.25],['255,200,32','#3a2c0c',1.25],['48,255,96','#0c2c14',1.25]];
+    if(faceVis){const ux=fy,uy=-fx,px=G.hx+fx*hd,py=G.hy+fy*hd;// face plane; u across, v 0 (top) .. 1 (bottom)
+      const F=(u,v)=>Pj(px+ux*u,py+uy*u,hT-(hT-hB)*v);g.setTransform(1,0,0,1,0,0);
+      const poly=(pts,c)=>{g.fillStyle=c;g.beginPath();for(const [u,v] of pts){const q=F(u,v);g.lineTo(q[0],q[1]);}g.fill();};
+      poly([[-hw,0],[hw,0],[hw,1],[-hw,1]],'#d8b818');poly([[-hw+.6,.07],[hw-.6,.07],[hw-.6,.93],[-hw+.6,.93]],FC);// gold rim + face
+      const VR=1/7.2;// lens radius in v per world px (face treated as ~7px tall)
+      LC.forEach(([on,off,r],i)=>{const vc=.2+i*.3,lit=i===k;
+        g.fillStyle='#050505';g.beginPath();for(let a=PI;a<=TAU+.01;a+=PI/6){const q=F(Math.cos(a)*(r+.45),vc+Math.sin(a)*(r+.45)*VR);g.lineTo(q[0],q[1]);}g.fill();// hood
+        g.fillStyle=lit?'rgb('+on+')':off;g.beginPath();for(let a=0;a<TAU;a+=PI/6){const q=F(Math.cos(a)*r,vc+Math.sin(a)*r*VR);g.lineTo(q[0],q[1]);}g.fill();
+        if(lit){g.fillStyle='rgba(255,255,255,.55)';g.beginPath();for(let a=0;a<TAU;a+=PI/4){const q=F(-.4+Math.cos(a)*.4,vc-.3*r*VR+Math.sin(a)*.4*VR);g.lineTo(q[0],q[1]);}g.fill();}});}
+    const ex=G.hx-G.ax*(hw-1.2),ey=G.hy-G.ay*(hw-1.2);// arm clamps onto the head's pole-side end, leaving the lid visible
+    const aw=.9,ax0=Math.min(x,ex)-(G.ax?0:aw),ax1=Math.max(x,ex)+(G.ax?0:aw),ay0=Math.min(y,ey)-(G.ay?0:aw),ay1=Math.max(y,ey)+(G.ay?0:aw);
+    box3(ax0,ay0,ax1,ay1,POLE_H-.005,POLE_H,'#505058','#2a2a2e','#45454c','#2e2e33','#5e5e66');// level mast arm (on top of the head)
+    // glow: spill from the lit lens toward oncoming cars, at lens height (always shown so the signal state stays readable)
+    const gh=hT-(hT-hB)*(.2+k*.3);setWorld(gh);const gx=G.hx+fx*(hd+3.5),gy=G.hy+fy*(hd+3.5),on=LC[k][0];
+    g.globalCompositeOperation='lighter';const gr=g.createRadialGradient(gx,gy,0,gx,gy,6.5);gr.addColorStop(0,'rgba('+on+','+(faceVis?.42:.3)+')');gr.addColorStop(1,'rgba(0,0,0,0)');
     g.fillStyle=gr;g.fillRect(gx-6.5,gy-6.5,13,13);g.globalCompositeOperation='source-over';}
   setWorld(0);}
 drawPOIGround=(o=>function(){o();drawRoadPropsGround();})(drawPOIGround);
