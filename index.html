@@ -2645,12 +2645,20 @@ function hubLayout(L){const u=U,D=DPRS,T_=TOUCHUI,port=L.port,hs=DISP.hud;
   const tf=Math.round(Math.max(T_?13*D:13,(T_?16*D*clamp(Math.min(W,H)/D/390,.95,1.25):19*u)*TXS()*clamp(hs,.85,1.5)));
   const th=Math.round(tf*1.55),sb=Math.round(Math.max(tf*.8,12*(T_?D:u))),bz=Math.round(Math.max(3,5*(T_?D:u)*clamp(hs,.85,1.5))),gap=Math.round(2*(T_?D:u));
   let fw,mw,mh,x,y;
-  if(port){fw=Math.round(W-(L.right+10*D)-6*D);mw=fw-2*bz;mh=Math.round(Math.min(mw*.62,H*.13));x=W-6*D-fw;y=Math.round(L.bank.y+L.bank.f+6*D);}
-  else if(T_){mw=Math.round(Math.min(200*u*hs,W*.3));mh=Math.round(Math.min(118*u*hs,H*.24));fw=mw+2*bz;x=Math.round(W-fw-8*D);y=Math.round(L.st.y+L.st.r+8*u);}
+  if(port){const g8=8*D,sz=Math.max(30*D,Math.min(L.rowS,(Math.max(L.bw,W*.58)-g8*3)/4)),rowEnd=L.bx+4*sz+3*g8;// keep clear of the phone/bag/pause/fs row
+    fw=Math.round(W-Math.max(L.right+10*D,rowEnd+8*D)-6*D);mw=fw-2*bz;mh=Math.round(Math.min(mw*.62,H*.13));x=W-6*D-fw;y=Math.round(8*D);}
+  else if(T_){mw=Math.round(Math.min(200*u*hs,W*.3));mh=Math.round(Math.min(118*u*hs,H*.24));{const stH=.82*Math.min(34*u*clamp(hs,.85,1.3),(mw+2*bz)/6)+6*D,room=H*.46-8*D-(2*bz+sb+gap+th)-stH;mh=Math.round(Math.max(H*.1,Math.min(mh,room)));}fw=mw+2*bz;x=Math.round(W-fw-8*D);y=Math.round(8*D);}
   else{mw=Math.round(Math.min(262*u*hs,W*.34));mh=Math.round(Math.min(158*u*hs,H*.3));fw=mw+2*bz;x=Math.round(W-fw-12*u);y=0;}
   const fh=bz+sb+mh+gap+th+bz;if(!T_)y=Math.round(H-fh-12*u);
   L.hub={x,y,w:fw,h:fh,bz,sb,th,tf,gap,tk:{x:x+bz,y:y+bz+sb+mh+gap,w:mw,h:th}};L.mm={x:x+bz,y:y+bz+sb,s:Math.min(mw,mh),w:mw,h:mh};
-  const fb=y+fh,bagH=(player&&player.inv&&player.inv.length?L.f(12)+6*u:0);
+  let fb=y+fh;const bagH=(player&&player.inv&&player.inv.length?L.f(12)+6*u:0);
+  if(T_){// v4st: on touch the phone sits at the top edge and the wanted stars hang directly under it, spanning its width
+    const sds=clamp(hs,.85,1.3),step=Math.min(34*u*sds,fw/6),r=step*.41,sx0=x+(fw-6*step)/2+step/2;
+    L.st={step,r,y:fb+4*D+r};L.st.x=i=>sx0+i*step;fb=L.st.y+r;
+    if(port){const fm=L.mon.f;L.mon={x:W-8*D,y:fb+4*D,f:fm,align:'right'};L.bank={x:W-8*D,y:L.mon.y+fm+1*D,f:L.bank.f};fb=L.bank.y+L.bank.f;}
+    else{if(L.zB){L.zB[1]=Math.min(L.zB[1],x-8*D);const need=2*L.rowS+24*D;L.rowBelow=(L.zA[1]-L.zA[0]<need)||(L.zB[1]-L.zB[0]<need);
+      L.bagY=L.rowBelow?L.bottom+8*D+L.rowS+6*D:L.bottom+6*u;L.carY=L.bagY+bagH;}}
+    L.colBottom=fb;}
   if(T_&&!interior)L.buffY=fb+10*u;
   if(port){L.missY=Math.max(L.bagY+bagH,fb+6*u)+4*u;L.carY=L.missY+(mission?24*u*TXS():0);}
   return L;}
@@ -2724,6 +2732,6 @@ displayView=(o=>function(v){o(v);const i=v.items.findIndex(x=>x.label==='View zo
   v.items.splice(i<0?v.items.length-2:i+1,0,{label:'Ticker speed',adj:d=>{let j=TICK_STEPS.indexOf(TICK_SPEED);j=clamp((j<0?2:j)+d,0,TICK_STEPS.length-1);TICK_SPEED=TICK_STEPS[j];try{localStorage.setItem('pta_ticker',String(TICK_SPEED));}catch(e){}},
     right:pct(TICK_SPEED),act:()=>{let j=TICK_STEPS.indexOf(TICK_SPEED);j=(j+1)%TICK_STEPS.length;TICK_SPEED=TICK_STEPS[j];try{localStorage.setItem('pta_ticker',String(TICK_SPEED));}catch(e){}}});})(displayView);
 window.__game.notes={get N(){return noteInit();},notify:(t,c,p)=>notify(t,c,p),hub:()=>hudLayout().hub,get speed(){return TICK_SPEED;}};
-function districtY(){const h=hudLayout().hub,y=H*.2,f=28*U;if(h&&h.y<y+f&&h.y+h.h>y-f&&h.x<W*.7)return h.y+h.h+f;return y;}
+function districtY(){const L=hudLayout(),h=L.hub,y=H*.2,f=28*U,bot=Math.max(h?h.y+h.h:0,L.colBottom||0);if(h&&h.y<y+f&&bot>y-f&&h.x<W*.7)return bot+f;return y;}
 
 </script></body></html>
