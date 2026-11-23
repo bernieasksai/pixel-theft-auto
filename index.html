@@ -37,7 +37,7 @@ function segCircle(x0,y0,x1,y1,cx,cy,r){const dx=x1-x0,dy=y1-y0,l2=dx*dx+dy*dy||
 const T=32,P=12,B=10,NB=18,CITYN=B*P+2,N=NB*P+2,WORLD=N*T;
 const ROAD=0,SIDE=1,BLD=2,GRASS=3,WATER=4,LOT=5,ALLEY=6;
 const map=new Uint8Array(N*N), buildings=[], trees=[], lotSlots=[];
-const tileAt=(tx,ty)=>(tx<0||ty<0||tx>=N||ty>=N)?BLD:map[ty*N+tx];
+let LVC=0;const tileAt=(tx,ty)=>(tx<0||ty<0||tx>=N||ty>=N)?BLD:LVC?garTile(tx,ty):map[ty*N+tx];
 const tileW=(x,y)=>tileAt(Math.floor(x/T),Math.floor(y/T));
 const solid=t=>t===BLD||t===WATER||(t===9&&!WMODE);
 const walkable=t=>t===SIDE||t===ALLEY||t===GRASS||t===LOT||t===10||t===11;
@@ -340,8 +340,8 @@ function manage(){manageExtras();const vr=Math.hypot(LW,LH)/2/S,r0=vr+30,r1=r0+3
   peds=peds.filter(p=>{if(p.keep&&!p.dead)return true;const d=Math.hypot(p.x-focus.x,p.y-focus.y);if(d>dr)return false;if(p.dead&&p.deadT>30&&d>vr)return false;if(p.cop&&stars===0&&d>vr+60)return false;return true;});
   pickups=pickups.filter(k=>Math.hypot(k.x-focus.x,k.y-focus.y)<dr+500&&k.t<k.life);
   let np=0,nc=0,npark=0,npk=0,nchase=0,ndead=0;
-  for(const p of peds){if(p.dead)ndead++;else if(!p.cop)np++;}
-  for(const c of cars){if(c.driver==='ai'||(c.driver==='cop'&&c.ai.mode==='traffic'))nc++;else if(!c.driver&&!c.wreck)npark++;if(c.ai&&c.ai.mode==='chase')nchase++;}
+  for(const p of peds){if(p.dead)ndead++;else if(!p.cop&&p.gar==null)np++;}
+  for(const c of cars){if(c.driver==='ai'||(c.driver==='cop'&&c.ai.mode==='traffic'))nc++;else if(!c.driver&&!c.wreck&&c.gar==null)npark++;if(c.ai&&c.ai.mode==='chase')nchase++;}
   for(const k of pickups)if(k.type!=='cash')npk++;
   for(let i=0;i<5&&np<PEDS;i++,np++)spawnPed(r0,r0+220);
   if(nc<TRAFFIC)spawnTraffic(r0,r1+150,R()<.12);
@@ -353,16 +353,16 @@ function updateWorld(dt){
   for(const c of cars)updateCar(c,dt);
   for(let i=0;i<cars.length;i++)for(let j=i+1;j<cars.length;j++)carCar(cars[i],cars[j]);
   for(const p of peds)updatePed(p,dt);
-  for(let i=bullets.length-1;i>=0;i--){const bl=bullets[i],ox=bl.x,oy=bl.y;bl.x+=bl.vx*dt;bl.y+=bl.vy*dt;bl.life-=dt;let dead=bl.life<=0;
+  for(let i=bullets.length-1;i>=0;i--){const bl=bullets[i],ox=bl.x,oy=bl.y;bl.x+=bl.vx*dt;bl.y+=bl.vy*dt;bl.life-=dt;let dead=bl.life<=0;LVC=bl.lvl|0;
     if(!dead&&(tileW(bl.x,bl.y)===BLD||tileW((bl.x+ox)/2,(bl.y+oy)/2)===BLD)){dead=true;for(let k=0;k<4;k++)addP(ox,oy,rr(-60,60),rr(-60,60),.2,1.5,'#ffd070');}
-    if(!dead)for(const c of cars){if(c===bl.ignore||c.wreck)continue;if(Math.abs(c.x-bl.x)>24||Math.abs(c.y-bl.y)>24)continue;if(pointInCar(c,bl.x,bl.y,1)){
+    if(!dead)for(const c of cars){if(c===bl.ignore||c.wreck||(c.lvl|0)!==LVC)continue;if(Math.abs(c.x-bl.x)>24||Math.abs(c.y-bl.y)>24)continue;if(pointInCar(c,bl.x,bl.y,1)){
       bulletHitCar(c,bl);dead=true;for(let k=0;k<3;k++)addP(bl.x,bl.y,rr(-50,50),rr(-50,50),.2,1.5,'#ffe080');
       if(bl.owner==='player'&&c.driver&&c.driver!=='player'){if(c.driver==='cop')addHeat(10);else if(c.ai)c.ai.panic=5;}break;}}
-    if(!dead)for(const p of peds){if(p.dead)continue;if(Math.abs(p.x-bl.x)>20||Math.abs(p.y-bl.y)>20)continue;if(segCircle(ox,oy,bl.x,bl.y,p.x,p.y,5.5)){
+    if(!dead)for(const p of peds){if(p.dead||(p.lvl|0)!==LVC)continue;if(Math.abs(p.x-bl.x)>20||Math.abs(p.y-bl.y)>20)continue;if(segCircle(ox,oy,bl.x,bl.y,p.x,p.y,5.5)){
       if(bl.owner==='cop'&&p.cop)continue;if(bl.owner==='thug'&&(p.kind==='thug'||p.kind==='target'))continue;p.hp-=bl.dmg;dead=true;for(let k=0;k<4;k++)addP(p.x,p.y,bl.vx*.05+rr(-30,30),bl.vy*.05+rr(-30,30),.3,2,'#b01010');
       if(p.hp<=0)killPed(p,bl.owner==='player');else if(bl.owner==='player'&&!p.cop&&(p.kind==='thug'||p.kind==='target'||(p.brave&&p.gun))){p.hostile=true;p.hostT=12;}else if(!p.cop){p.state='flee';p.fx=ox;p.fy=oy;p.t=5;}else if(bl.owner==='player')addHeat(30);break;}}
-    if(!dead&&bl.owner!=='player'&&player.active&&!player.inCar&&segCircle(ox,oy,bl.x,bl.y,player.x,player.y,5)){hurtPlayer(bl.dmg);player.hurtT=.25;dead=true;sfx('hurt');for(let k=0;k<3;k++)addP(player.x,player.y,rr(-30,30),rr(-30,30),.3,2,'#b01010');}
-    if(dead)bullets.splice(i,1);}
+    if(!dead&&bl.owner!=='player'&&player.active&&!player.inCar&&(player.lvl|0)===LVC&&segCircle(ox,oy,bl.x,bl.y,player.x,player.y,5)){hurtPlayer(bl.dmg);player.hurtT=.25;dead=true;sfx('hurt');for(let k=0;k<3;k++)addP(player.x,player.y,rr(-30,30),rr(-30,30),.3,2,'#b01010');}
+    if(dead)bullets.splice(i,1);}LVC=0;
   for(let i=parts.length-1;i>=0;i--){const p=parts[i];p.life-=dt;if(p.life<=0){parts.splice(i,1);continue;}p.x+=p.vx*dt;p.y+=p.vy*dt;const k=Math.exp(-3*dt);p.vx*=k;p.vy*=k;p.size+=p.grow*dt;}
   for(let i=explosions.length-1;i>=0;i--){explosions[i].t+=dt;if(explosions[i].t>.6)explosions.splice(i,1);}
   for(const k of pickups)k.t+=dt;
@@ -4599,6 +4599,85 @@ startGame=(o=>function(){V7.task=null;V7.offers=null;V7.offerT=30;V7.turf=null;V
 window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get rep(){return{V7,GW7,GANGS7,GRT7,RP,gwAdd,gAdd,gwTier,gwName,gTier,turf7,noShoot7,r7MakeOffers,r7Accept,r7Done,r7Cancel,r7View,r7GangMember,gwPerks};}}));
 
 // ======================================================================
+//  v6g: MULTI-LEVEL PARKING GARAGE (geometry + level system core)
+//  A 10x10-tile, 3-deck garage (ground + deck 2 + open-air roof) replaces
+//  one Downtown block. Every car / ped / the player carries .lvl (0..2) and
+//  ._gz (draw height). tileAt() reads the level grid while an entity on an
+//  upper level is being updated (LVC), so collision, wandering and bullets
+//  all work per level. Straight ramps move you between decks.
+//  Wrappers (update/draw hooks) live in v6h so they sit outermost.
+// ======================================================================
+const GAR={list:[],drawing:false,active:false,dim:.24,stats:{built:0},H:[0,.13,.26],tick:0};
+// local layout (10x10). 1 = solid at that level.  Ramp A: lane x7-8 rows 3-6, ground(south) -> deck 2(north).
+// Ramp B: lane x1-2 rows 3-6, deck 2(north) -> roof(south).
+const GAR_SOLID=[
+  (x,y)=>(x>=6&&y<=2)||((x===6||x===9)&&y>=3&&y<=6),
+  (x,y)=>((x===6||x===9||x===0||x===3)&&y>=3&&y<=6)||(x>=7&&y>=7)||(x<=2&&y>=7),
+  (x,y)=>((x===0||x===3)&&y>=3&&y<=6)||(x<=2&&y<=2)];
+function garBuild(){if(GAR.list.length)return;try{
+  const names=DISTRICTS.map(d=>d.name),sx=5*P-1,sy=4*P+6;
+  const want=[['DOWNTOWN','DOWNTOWN GARAGE'],['BAYSIDE','BAYSIDE GARAGE'],['SOUTH BEACH','BEACH GARAGE']];
+  for(const [dn,label] of want){if(GAR.list.length>=2)break;if(dn!=='DOWNTOWN'&&GAR.list.length>=2)break;let best=null,bd=1e18;
+    for(let ry=1;ry<N-12;ry++)for(let rx=1;rx<N-12;rx++){// ring origin: a 10x10 square whose outer ring is all sidewalk
+      if(map[ry*N+rx]!==SIDE)continue;if(names[distAt5((rx+5)*T,(ry+5)*T)]!==dn)continue;
+      let ok=true;for(let i=0;i<10&&ok;i++){if(map[ry*N+rx+i]!==SIDE||map[(ry+9)*N+rx+i]!==SIDE||map[(ry+i)*N+rx]!==SIDE||map[(ry+i)*N+rx+9]!==SIDE)ok=false;}
+      if(!ok)continue;// roads all round, interior has no water / sea
+      for(let i=0;i<10&&ok;i++){if(map[(ry-1)*N+rx+i]!==ROAD||map[(ry+10)*N+rx+i]!==ROAD||map[(ry+i)*N+rx-1]!==ROAD||map[(ry+i)*N+rx+10]!==ROAD)ok=false;}
+      for(let y=1;y<9&&ok;y++)for(let x=1;x<9;x++){const t=map[(ry+y)*N+rx+x];if(t===WATER||t===SEA||t===ROAD||(typeof BRIDGE5!=='undefined'&&BRIDGE5&&BRIDGE5[(ry+y)*N+rx+x]))ok=false;}
+      if(!ok)continue;const X0=rx*T,Y0=ry*T,X1=X0+10*T,Y1=Y0+10*T,inR=(x,y,m)=>x>X0-m&&x<X1+m&&y>Y0-m&&y<Y1+m;
+      for(const b of buildings)if(b.x0<X1&&b.x1>X0&&b.y0<Y1&&b.y1>Y0&&(b.poi||b.heli||b.garage))ok=false;
+      for(const o of pois)if((o.spot&&inR(o.spot.x,o.spot.y,8))||(o.door&&inR(o.door.x,o.door.y,8)))ok=false;
+      if(typeof atms!=='undefined')for(const a of atms)if(inR(a.x,a.y,8))ok=false;for(const c of cams)if(inR(c.x,c.y,20))ok=false;
+      if(!ok)continue;const d=(rx+5-sx)**2+(ry+5-sy)**2;if(d<14*14)continue;if(d<bd){bd=d;best={rx,ry};}}
+    if(!best)continue;const {rx,ry}=best,X0=rx*T,Y0=ry*T,X1=X0+10*T,Y1=Y0+10*T;
+    // clear the block: buildings, trees, lot slots
+    for(let i=buildings.length-1;i>=0;i--){const b=buildings[i];if(b.x0<X1&&b.x1>X0&&b.y0<Y1&&b.y1>Y0)buildings.splice(i,1);}
+    for(let i=trees.length-1;i>=0;i--){const t=trees[i];if(t.x>X0-4&&t.x<X1+4&&t.y>Y0-4&&t.y<Y1+4)trees.splice(i,1);}
+    for(let i=lotSlots.length-1;i>=0;i--){const t=lotSlots[i];if(t.x>X0&&t.x<X1&&t.y>Y0&&t.y<Y1)lotSlots.splice(i,1);}
+    const G={id:GAR.list.length,label,dn,tx0:rx,ty0:ry,w:10,h:10,x0:X0,y0:Y0,x1:X1,y1:Y1,cx:X0+5*T,cy:Y0+5*T,H:GAR.H,grid:[],stalls:[],peds:[],seen:false};
+    for(let L=0;L<3;L++){const gg=new Uint8Array(100);for(let y=0;y<10;y++)for(let x=0;x<10;x++)gg[y*10+x]=GAR_SOLID[L](x,y)?1:0;G.grid.push(gg);}
+    for(let y=0;y<10;y++)for(let x=0;x<10;x++)map[(ry+y)*N+rx+x]=G.grid[0][y*10+x]?BLD:LOT;
+    const U=(u,v)=>({x:X0+u*T,y:Y0+v*T});
+    G.ramps=[{lo:0,x0:X0+7*T,x1:X0+9*T,y0:Y0+3*T,y1:Y0+7*T,dir:-1,lane:8,
+        bot:U(8,8.3),botIn:U(8,6),top:U(8,1.4),topIn:U(8,4)},
+      {lo:1,x0:X0+1*T,x1:X0+3*T,y0:Y0+3*T,y1:Y0+7*T,dir:1,lane:2,
+        bot:U(2,1.4),botIn:U(2,4),top:U(2,8.3),topIn:U(2,6)}];
+    G.exit=U(8,11.6);G.exits=[U(8,11.6),U(-1.6,5),U(5,-1.6)];
+    // parked stalls per deck (u,v in tiles, a angle)
+    const ST=[[0,1.0,1.3,PI/2],[0,2.4,1.3,-PI/2],[0,3.8,1.3,PI/2],[0,1.2,8.3,-PI/2],[0,4.2,8.3,PI/2],
+      [1,3.7,8.4,-PI/2],[1,5.3,8.4,PI/2],[1,4.6,0.6,0],
+      [2,4.6,1.3,PI/2],[2,6.0,1.3,-PI/2],[2,7.4,1.3,PI/2],[2,8.8,1.3,PI/2],[2,0.9,8.3,0]];
+    for(const [L,u,v,a] of ST)G.stalls.push({lvl:L,x:X0+u*T,y:Y0+v*T,a,car:null,filled:false});
+    G.pedSpots=[[1,4.5,5.0],[1,9.4,0.7],[2,6.2,6.6],[2,4.0,8.6],[2,8.4,3.8]].map(([L,u,v])=>({lvl:L,x:X0+u*T,y:Y0+v*T,ped:null}));
+    G.tok={x:X0+9.5*T,y:Y0+7.5*T,tx:rx+9,ty:ry+7,lvl:2};
+    G.kick={x:X0+6.5*T,y:Y0+5*T,w:44,h:30,cd:0};
+    // pseudo-building so it joins the far-to-near building sort
+    const pb={x0:X0,y0:Y0,x1:X1,y1:Y1,h:GAR.H[2],floors:3,seed:777+G.id,det:[],garage:G,wN:'#8c9098',wS:'#8c9098',wE:'#7c8088',wW:'#7c8088',roof:'#6e7178',rim:'#55585e'};
+    buildings.push(pb);G.bd=pb;GAR.list.push(G);
+    // minimap: grey deck with a lighter rim
+    try{const m=mini.getContext('2d');m.fillStyle='rgb(118,122,132)';m.fillRect(rx,ry,10,10);m.fillStyle='rgb(160,164,172)';m.fillRect(rx,ry,10,1);m.fillRect(rx,ry+9,10,1);m.fillRect(rx,ry,1,10);m.fillRect(rx+9,ry,1,10);}catch(e){}}
+  GAR.stats.built=GAR.list.length;if(typeof chunkCache!=='undefined')chunkCache.clear();}catch(e){console.error('v6g build',e);}}
+garBuild();
+function garAt(x,y,pad){pad=pad||0;for(const G of GAR.list)if(x>=G.x0-pad&&x<G.x1+pad&&y>=G.y0-pad&&y<G.y1+pad)return G;return null;}
+// tile lookup on an upper level (only called while LVC>0)
+function garTile(tx,ty){for(const G of GAR.list){const x=tx-G.tx0,y=ty-G.ty0;if(x>=0&&y>=0&&x<10&&y<10)return G.grid[LVC][y*10+x]?BLD:LOT;}return BLD;}
+// level + draw height from position (ramps move you between decks)
+function garRampTick(e){const G=garAt(e.x,e.y,0);if(!G){if(e.lvl)e.lvl=0;e._gz=0;e._rmp=null;return;}
+  const L=e.lvl|0;let on=null;for(const r of G.ramps)if((L===r.lo||L===r.lo+1)&&e.x>=r.x0&&e.x<r.x1&&e.y>=r.y0&&e.y<r.y1){on=r;break;}
+  if(on){let z=on.dir<0?(on.y1-e.y)/(on.y1-on.y0):(e.y-on.y0)/(on.y1-on.y0);z=Math.max(0,Math.min(1,z));e.lvl=z>=.5?on.lo+1:on.lo;e._gz=G.H[on.lo]+(G.H[on.lo+1]-G.H[on.lo])*z;e._rmp=on;}
+  else{e._gz=G.H[L]||0;e._rmp=null;}}
+// where something on level L should head to reach level TL (ramp waypoints); returns a point at least 60px ahead
+// same deck, but e is still in a ramp lane: walk out of the lane end first (the lane walls block a straight line)
+function garLaneOut(G,e,L,me){for(const r of G.ramps){if(r.lo!==L&&r.lo+1!==L)continue;const inL=q=>q.x>=r.x0-4&&q.x<=r.x1+4&&q.y>=r.y0-4&&q.y<=r.y1+4;
+    if(!(e._rmp===r||inL(e))||inL(me))continue;const p=r.lo===L?r.bot:r.top,dx=p.x-e.x,dy=p.y-e.y,d=Math.hypot(dx,dy)||1;if(d<10)return null;const k=Math.max(60,d)/d;return{x:e.x+dx*k,y:e.y+dy*k};}return null;}
+function garRoute(G,e,L,TL){let p;
+  // zone in front of a ramp end: the lane, up to 2.6 tiles beyond that end
+  const zone=(r,bottom)=>{if(e.x<r.x0-6||e.x>r.x1+6)return false;const ye=(r.dir<0)===bottom?r.y1:r.y0,out=(r.dir<0)===bottom?1:-1,d=(e.y-ye)*out;return d>=-4&&d<=2.6*T;};
+  if(TL>L){const r=G.ramps.find(r=>r.lo===L);if(!r)return null;if(e._rmp===r)p=r.top;else if(zone(r,true))p=r.botIn;else p=r.bot;}
+  else{const r=G.ramps.find(r=>r.lo===L-1);if(!r)return null;if(e._rmp===r)p=r.bot;else if(zone(r,false))p=r.topIn;else p=r.top;}
+  const dx=p.x-e.x,dy=p.y-e.y,d=Math.hypot(dx,dy)||1,k=Math.max(60,d)/d;return{x:e.x+dx*k,y:e.y+dy*k};}
+
+// ======================================================================
 //  v6n: BUILDING NOOKS + HIDDEN PASSAGES + FAKE-WALL COURTYARDS
 //  Carves small recesses into building sides (1x1 / 1x2, some roofed
 //  over), a few covered arcades straight through deep buildings, and a
@@ -4621,7 +4700,7 @@ function nkBuild(){if(NK8.ready)return;NK8.ready=true;try{
   const CAPN={'DOWNTOWN':5,'OLD TOWN':5,'INDUSTRIAL':4,'RIVERSIDE':5,'BAYSIDE':3,'MARINA':2,'SOUTH BEACH':3,'OCEAN DRIVE':2,'PORT OF MIAMI':4};
   const CAPA={'OLD TOWN':1,'RIVERSIDE':1,'SOUTH BEACH':1,'DOWNTOWN':1,'BAYSIDE':1},CAPC={'DOWNTOWN':1,'INDUSTRIAL':1,'PORT OF MIAMI':1,'RIVERSIDE':1};
   const cnt={n:{},a:{},c:{}};const SIDES=[[0,-1],[0,1],[-1,0],[1,0]];// N S W E (matches wall side ids)
-  const cand=buildings.filter(bd=>!bd.heli&&!bd.rural&&!bd.ship5&&bd.h>=.07);
+  const cand=buildings.filter(bd=>!bd.heli&&!bd.rural&&!bd.ship5&&!bd.garage&&bd.h>=.07);
   for(let i=cand.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[cand[i],cand[j]]=[cand[j],cand[i]];}
   for(const bd of cand){const tx0=Math.round(bd.x0/T),ty0=Math.round(bd.y0/T),w=Math.round((bd.x1-bd.x0)/T),h=Math.round((bd.y1-bd.y0)/T);
     if(w<3||h<3||tx0*T!==bd.x0||ty0*T!==bd.y0)continue;const dn=names[distAt5((bd.x0+bd.x1)/2,(bd.y0+bd.y1)/2)];if(!CITY.has(dn))continue;
@@ -4715,7 +4794,7 @@ function nkDrawPlain(bd){const h=bd.h;g.setTransform(1,0,0,1,0,0);
     g.fillStyle='#eee';g.fillRect(cx-12,cy-14,5,28);g.fillRect(cx+7,cy-14,5,28);g.fillRect(cx-7,cy-2.5,14,5);}
   g.setTransform(1,0,0,1,0,0);}
 // tokens + stash on the ground, under the buildings
-function nkDrawGroundToks(){if(interior||typeof tokBuild!=='function')return;try{setWorld(0);const R=TKR();for(const k of tokBuild())if(!R.got[k.key]&&inView(k.x,k.y,30))drawTok8(k);
+function nkDrawGroundToks(){if(interior||typeof tokBuild!=='function')return;try{setWorld(0);const R=TKR();for(const k of tokBuild())if(!R.got[k.key]&&!k.lvl&&inView(k.x,k.y,30))drawTok8(k);
   if(R.ms[10]){const s=tokStashPos();if(s&&inView(s.x,s.y,30))drawStash8(s,R.stashCd<=0);}g.setTransform(1,0,0,1,0,0);}catch(e){}}
 // which world points should see through this group's roof right now
 function nkHoles(bd){const out=[],me=player.inCar||player;if(state!=='play'&&state!=='dead')return out;
@@ -4729,7 +4808,7 @@ drawBuildings=(o=>function(){nkDrawGroundToks();if(typeof W4!=='undefined'&&W4.g
   const now=rtNow(),dt=Math.min(.1,Math.max(0,now-_nkLT));_nkLT=now;const vis=[];NK8.dbg.holes=0;
   for(const bd of buildings){if(bd.x1<vx0-4||bd.x0>vx1+4||bd.y1<vy0-4||bd.y0>vy1+4)continue;const cx=(bd.x0+bd.x1)/2-camX,cy=(bd.y0+bd.y1)/2-camY;bd._d=cx*cx+cy*cy;vis.push(bd);}
   vis.sort((a,b)=>b._d-a._d);
-  for(const bd of vis){if(!bd.nk){nkDrawPlain(bd);continue;}const n=bd.nk,H=NK8.cutOn?nkHoles(bd):[];n.ca+=((H.length?1:0)-n.ca)*Math.min(1,dt*9);if(H.length)n.last=H;
+  for(const bd of vis){if(bd.garage){garDraw(bd);continue;}if(!bd.nk){nkDrawPlain(bd);continue;}const n=bd.nk,H=NK8.cutOn?nkHoles(bd):[];n.ca+=((H.length?1:0)-n.ca)*Math.min(1,dt*9);if(H.length)n.last=H;
     const HH=H.length?H:(n.ca>.03?n.last||[]:[]);
     if(!HH.length||n.ca<.03){nkDrawGroup(bd);continue;}
     g.save();g.setTransform(1,0,0,1,0,0);const hs=[];
@@ -4751,7 +4830,7 @@ window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescri
 // ======================================================================
 const TOK8_TOTAL=56;
 const TOK8_PLAN=[
-  ['DOWNTOWN',['nook','corner','alley','court','nook','arcade']],
+  ['DOWNTOWN',['nook','corner','roof','court','nook','arcade']],
   ['OLD TOWN',['nook','corner','park','nook','arcade']],
   ['INDUSTRIAL',['lot','nook','corner','court','nook']],
   ['RIVERSIDE',['park','nook','river','arcade','court']],
@@ -4764,8 +4843,8 @@ const TOK8_PLAN=[
   ['PORT OF MIAMI',['lot','nook','corner','dock','court']],
   ['BISCAYNE BAY',['causeway','causeway','boat','dock']],
   ['ATLANTIC OCEAN',['boat','swim']]];
-const TOK8_HINT={nook:'nooks in walls',arcade:'passages',court:'behind fake walls',alley:'alleys',corner:'corners',park:'parks',lot:'lots',field:'fields',river:'riverbank',shore:'waterfront',dock:'dock ends',beach:'the beach',causeway:'causeway',swim:'swim out',boat:'open water'};
-const TOK8_WATER={causeway:1,swim:1,boat:1};const TOK8_SECRET={nook:1,arcade:1,court:1};
+const TOK8_HINT={roof:'garage roof',nook:'nooks in walls',arcade:'passages',court:'behind fake walls',alley:'alleys',corner:'corners',park:'parks',lot:'lots',field:'fields',river:'riverbank',shore:'waterfront',dock:'dock ends',beach:'the beach',causeway:'causeway',swim:'swim out',boat:'open water'};
+const TOK8_WATER={causeway:1,swim:1,boat:1};const TOK8_SECRET={nook:1,arcade:1,court:1,roof:1};const TOK8_VER=3;
 const TOK8_MS=[
   {n:5,name:'$1,000 cash',sub:'Paid on the spot',sub2:'',fn:()=>addMoney(1000)},
   {n:10,name:'Weapon stash at home',sub:'Uzi, shotgun, health',sub2:'At YOUR PLACE, refills every 10 min',fn:()=>{TKR().stashCd=0;}},
@@ -4780,9 +4859,9 @@ const TOK8_MS=[
   {n:56,name:'TOKEN MASTER',sub:'$50,000 + fireworks',sub2:'Plus +25 health, armor, goodwill',fn:()=>tokFinale()}];
 const TK8={list:null,byKey:{},dist:[],banner:null,fx:[],stats:{picked:0,ms:0,dc:0,stash:0,car:0,boat:0},near:1e9,nearK:null,tickT:0,stash:null};
 if(typeof NCAT!=='undefined')NCAT.tok={c:'#ffd23a',g:'\u25c6',n:'TOKEN'};
-function TKR(){let R=career.tok;if(!R||typeof R!=='object')R=career.tok={got:{},ms:{},dc:{},stashCd:0};R.got=R.got||{};R.ms=R.ms||{};R.dc=R.dc||{};if(typeof R.stashCd!=='number')R.stashCd=0;if(R.v!==2&&TK8.list)tokMigrate(R);return R;}
+function TKR(){let R=career.tok;if(!R||typeof R!=='object')R=career.tok={got:{},ms:{},dc:{},stashCd:0};R.got=R.got||{};R.ms=R.ms||{};R.dc=R.dc||{};if(typeof R.stashCd!=='number')R.stashCd=0;if(R.v!==TOK8_VER&&TK8.list)tokMigrate(R);return R;}
 // v6n moved ~20 tokens into nooks: collected keys that no longer exist map onto the nearest uncollected token in the same district (count is kept)
-function tokMigrate(R){R.v=2;const names=DISTRICTS.map(d=>d.name);for(const key of Object.keys(R.got)){if(TK8.byKey[key])continue;delete R.got[key];const [tx,ty]=key.split(',').map(Number);if(!isFinite(tx)||!isFinite(ty))continue;
+function tokMigrate(R){R.v=TOK8_VER;const names=DISTRICTS.map(d=>d.name);for(const key of Object.keys(R.got)){if(TK8.byKey[key])continue;delete R.got[key];const [tx,ty]=key.split(',').map(Number);if(!isFinite(tx)||!isFinite(ty))continue;
   const x=tx*T+T/2,y=ty*T+T/2,dn=names[distAt5(x,y)];let b=null,bd=1e18;for(const pass of[0,1]){for(const k of TK8.list){if(R.got[k.key]||(pass===0&&k.dn!==dn))continue;const d=(k.x-x)**2+(k.y-y)**2;if(d<bd){bd=d;b=k;}}if(b)break;}if(b)R.got[b.key]=1;}TK8.stats.migrated=(TK8.stats.migrated||0)+1;}
 function tokPretty(n){return String(n).toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()).replace(/ Of /g,' of ');}
 // ---------------------------------------------------------------- placement (deterministic, built once from the map)
@@ -4795,7 +4874,7 @@ function tokBuild(){if(TK8.list)return TK8.list;const rnd=mulberry32(5656),NN=N*
   const brN=(x,y)=>{for(const [a,b] of[[1,0],[-1,0],[0,1],[0,-1]]){const xx=x+a,yy=y+b;if(xx>=0&&yy>=0&&xx<N&&yy<N&&BR(yy*N+xx))return true;}return false;};
   const sx=5*P-1,sy=4*P+6,bad=[];for(const o of pois){if(o.spot)bad.push(o.spot);if(o.door)bad.push(o.door);}if(typeof atms!=='undefined')for(const a of atms)bad.push(a);
   const names=DISTRICTS.map(d=>d.name),cand={};for(const k in TOK8_HINT)cand[k]=[];
-  for(let ty=2;ty<N-2;ty++)for(let tx=2;tx<N-2;tx++){const i=ty*N+tx,t=map[i];if(BR(i)||(typeof NK8!=='undefined'&&NK8.cellSet.has(i)))continue;const x=tx*T+T/2,y=ty*T+T/2;
+  for(let ty=2;ty<N-2;ty++)for(let tx=2;tx<N-2;tx++){const i=ty*N+tx,t=map[i];if(BR(i)||(typeof NK8!=='undefined'&&NK8.cellSet.has(i))||(typeof GAR!=='undefined'&&garAt(tx*T+16,ty*T+16,40)))continue;const x=tx*T+T/2,y=ty*T+T/2;
     if((tx-sx)**2+(ty-sy)**2<49)continue;let ks=[];
     if(t===SEA){if(brN(tx,ty))ks.push('causeway');else{if(dWalk[i]>=2&&dWalk[i]<=4)ks.push('swim');if(dLand[i]>=7)ks.push('boat');}}
     else if(LANDOK.has(t)){let ok=true;for(const b of bad)if(Math.abs(b.x-x)<56&&Math.abs(b.y-y)<56){ok=false;break;}
@@ -4811,15 +4890,16 @@ function tokBuild(){if(TK8.list)return TK8.list;const rnd=mulberry32(5656),NN=N*
       if(t===DOCK&&n4(tx,ty,v=>v===SEA)>=2&&n4(tx,ty,v=>v===DOCK)<=1)ks.push('dock');
       if(t===SAND&&dSea[i]>=1&&dSea[i]<=3)ks.push('beach');}
     if(!ks.length)continue;const dn=names[distAt5(x,y)];for(const k of ks)cand[k].push({i,tx,ty,x,y,dn,k});}
+  if(typeof GAR!=='undefined')for(const G of GAR.list)cand.roof.push({i:G.tok.ty*N+G.tok.tx,tx:G.tok.tx,ty:G.tok.ty,x:G.tok.x,y:G.tok.y,dn:G.dn,k:'roof',lvl:G.tok.lvl,roofed:false});
   if(typeof NK8!=='undefined')for(const sp of NK8.spots){if(map[sp.ty*N+sp.tx]!==ALLEY)continue;cand[sp.k].push({i:sp.ty*N+sp.tx,tx:sp.tx,ty:sp.ty,x:sp.tx*T+T/2,y:sp.ty*T+T/2,dn:sp.dn,k:sp.k,roofed:sp.roofed});}
   const picked=[],far=(c,m)=>{for(const p of picked)if((p.tx-c.tx)**2+(p.ty-c.ty)**2<m*m)return false;return true;};
   const ORDER=['corner','alley','park','lot','shore','beach','dock','field','river','swim','boat','causeway'];
   for(const [dn,kinds] of TOK8_PLAN)for(const k of kinds){let c=null;
-    for(const m of[10,7,4]){let L=cand[k].filter(q=>q.dn===dn&&far(q,m)&&!picked.includes(q));if(!L.length&&TOK8_SECRET[k])for(const k2 of['nook','arcade','court']){L=cand[k2].filter(q=>q.dn===dn&&far(q,m)&&!picked.includes(q));if(L.length)break;}
+    for(const m of(k==='roof'?[0]:[10,7,4])){let L=cand[k].filter(q=>q.dn===dn&&far(q,m)&&!picked.includes(q));if(!L.length&&TOK8_SECRET[k])for(const k2 of['nook','arcade','court','roof']){L=cand[k2].filter(q=>q.dn===dn&&far(q,m)&&!picked.includes(q));if(L.length)break;}
       if(!L.length)for(const k2 of ORDER){L=cand[k2].filter(q=>q.dn===dn&&far(q,m));if(L.length)break;}
       if(L.length){c=L[Math.floor(rnd()*L.length)];break;}}
     if(c)picked.push(c);}
-  TK8.list=picked.map((c,j)=>({id:j,key:c.tx+','+c.ty,x:c.x,y:c.y,tx:c.tx,ty:c.ty,dn:c.dn,kind:c.k,water:!!TOK8_WATER[c.k],secret:!!TOK8_SECRET[c.k],roofed:!!c.roofed,ph:rnd()*6.28}));
+  TK8.list=picked.map((c,j)=>({id:j,key:c.tx+','+c.ty,x:c.x,y:c.y,tx:c.tx,ty:c.ty,dn:c.dn,kind:c.k,water:!!TOK8_WATER[c.k],secret:!!TOK8_SECRET[c.k],roofed:!!c.roofed,lvl:c.lvl|0,ph:rnd()*6.28}));
   TK8.cand={};for(const k in cand)TK8.cand[k]=cand[k].length;TK8.byKey={};for(const k of TK8.list)TK8.byKey[k.key]=k;
   TK8.dist=TOK8_PLAN.map(([dn])=>({dn,toks:TK8.list.filter(k=>k.dn===dn)})).filter(d=>d.toks.length);return TK8.list;}
 function tokHas(k){return !!TKR().got[k.key];}
@@ -4861,7 +4941,7 @@ function tokCarTick(){const R=TKR();
 function tokTick(dt){const L=tokBuild(),R=TKR(),p=player;if(TK8.banner){TK8.banner.t-=dt;if(TK8.banner.t<=0)TK8.banner=null;}
   for(let i=TK8.fx.length-1;i>=0;i--){const f=TK8.fx[i];f.t+=dt;if(f.t>(f.k==='fireworks'?7:1))TK8.fx.splice(i,1);}
   if(state!=='play'||interior)return;const tg=p.inCar||p;if(!p.active&&!p.inCar)return;const rr=p.inCar?26:18;let nd=1e9,nk=null;
-  for(const k of L){if(R.got[k.key])continue;const d=Math.hypot(k.x-tg.x,k.y-tg.y);if(d<nd){nd=d;nk=k;}if(d<rr)tokTake(k);}
+  for(const k of L){if(R.got[k.key])continue;const d=Math.hypot(k.x-tg.x,k.y-tg.y);if(d<nd){nd=d;nk=k;}if(d<rr&&(tg.lvl|0)===(k.lvl|0))tokTake(k);}
   TK8.near=nd;TK8.nearK=nk;
   if(R.ms[35]&&p.swim&&!p.inCar&&p.breath!=null)p.breath=Math.min(1,p.breath+dt/56);
   if(R.ms[50]&&lastSeen>5&&heat>0)heat=Math.max(0,heat-(stars>=4?22:32)*.25*dt);
@@ -4908,7 +4988,7 @@ function tokView(){const v={title:'TOKENS',lines:[],items:[],foot:[],cards:true}
   v.items.push({label:'TOKENS FOUND  '+n+' / '+TOK8_TOTAL,right:'',sub:nm?'Next reward at '+nm.n+': '+(nm.n-n)+' to go':'All rewards unlocked!',bar:{v:n/TOK8_TOTAL,c:'#ffd23a'},col:'#ffd23a',act:()=>{}});
   if(nm)v.items.push({label:'NEXT: '+nm.n+' TOKENS',right:'',col:'#ffd23a',sub:nm.name,sub2:nm.sub,act:()=>{}});
   if(R.ms[10]){const rd=R.stashCd<=0;v.items.push({label:'HOME STASH',right:rd?'READY':'WAIT',rcol:rd?'#9f9':'#fc8',sub:rd?'Walk over the crate':'Refills in '+Math.ceil(R.stashCd/60)+' min',sub2:'Select for GPS to YOUR PLACE',act:()=>{const h=tokHome();if(h){gps={type:'home',label:'YOUR PLACE'};msg('GPS SET: YOUR PLACE','#8cf',1.6);}}});}
-  for(const d of TK8.dist){const D=tokDist(d.dn),done=D.got===D.tot,left=[...new Set(D.toks.filter(k=>!tokHas(k)).map(k=>TOK8_HINT[k.kind]))].slice(0,2);
+  for(const d of TK8.dist){const D=tokDist(d.dn),done=D.got===D.tot,left=[...new Set(D.toks.filter(k=>!tokHas(k)).sort((a,b)=>(b.kind==='roof')-(a.kind==='roof')).map(k=>TOK8_HINT[k.kind]))].slice(0,2);
     v.items.push({label:tokPretty(d.dn)+'  '+D.got+'/'+D.tot,right:done?'DONE':'',rcol:'#9f9',col:done?'#60e070':null,sub:done?'Bonus paid: $'+(250*D.tot).toLocaleString('en-US'):'Look: '+left.join(', '),bar:{v:D.got/D.tot,c:done?'#60e070':'#ffd23a'},act:()=>{}});}
   for(const m of TOK8_MS){const got=!!R.ms[m.n];v.items.push({label:m.name,right:got?'GOT':'AT '+m.n,rcol:got?'#9f9':'#ffd23a',col:got?'#ffd23a':null,dis:!got,sub:m.sub,sub2:m.sub2||(got?'Unlocked':m.n+' tokens'),act:()=>{}});}
   if(!TOUCHUI)v.foot.push('Tokens spin and sparkle.','The minimap pulses gold','when one is close.');return v;}
@@ -4937,5 +5017,111 @@ touchSysItems=(o=>function(){const L=o();L.unshift({label:'Steering  \u203a',rig
 phoneView=(o=>function(){if(phone.app==='steering'){const v={title:'STEERING',lines:[],items:[],foot:[]};steerView(v);return v;}return o();})(phoneView);
 phoneKey=(o=>function(code){if(phone.app==='steering'&&(code==='Escape'||code==='Backspace')){phone.app='system';phone.sel=0;return;}return o(code);})(phoneKey);
 window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get steer(){return{params:steerParams(),def:STEER_DEF,dbg:STEER_DBG,set:steerSet,name:steerName,joyR,touchPrefs};}}));
+
+// ======================================================================
+//  v6h: GARAGE hooks (outermost wrappers) - per-level update context,
+//  cross-level isolation, cops using ramps / waiting at the exit, deck
+//  population, roof jump, and the layered fake-3D garage renderer.
+// ======================================================================
+let _gL=null,_gLT=-1;
+function garLists(){if(_gLT===gtime&&_gL)return _gL;_gLT=gtime;const P=[[],[],[]],C=[[],[],[]];for(const p of peds)P[Math.min(2,p.lvl|0)].push(p);for(const c of cars)C[Math.min(2,c.lvl|0)].push(c);_gL={P,C};return _gL;}
+function garNear(e){let b=null,bd=1e18;for(const G of GAR.list){const d=(e.x-G.cx)**2+(e.y-G.cy)**2;if(d<bd){bd=d;b=G;}}return b&&bd<700*700?b:null;}
+function garMerge(orig,list,snap,now){// fold changes made to the per-level list back into the real array
+  const n0=snap.length;let same=now===list&&list.length>=n0;if(same)for(let i=0;i<n0;i++)if(list[i]!==snap[i]){same=false;break;}
+  if(same){for(let i=n0;i<list.length;i++)orig.push(list[i]);list.length=n0;return orig;}
+  const ns=new Set(now),ls=new Set(snap),rm=new Set(snap.filter(x=>!ns.has(x)));const out=orig.filter(x=>!rm.has(x));for(const x of now)if(x&&!ls.has(x))out.push(x);_gLT=-1;return out;}
+// run fn as entity e (isP: the player) on its own level
+function garCall(e,isP,fn){if(!GAR.active)return fn();
+  const me=player.inCar||player,L=Math.min(2,(isP?me.lvl:e.lvl)|0),G=garNear(isP?me:e);if(!G&&!L)return fn();
+  const lists=garLists(),sp=peds,sc=cars,lp=lists.P[L],lc=lists.C[L],np0=lp.length,nc0=lc.length,lp0=lp.slice(),lc0=lc.slice(),PL=me.lvl|0;let fk=null;
+  if(!isP&&e!==player.inCar&&PL!==L&&G&&player.active){
+    const chase=(e.cop&&stars>0)||e.hostile||(e.driver==='cop'&&e.ai&&e.ai.mode==='chase');let f=null;
+    if(chase){if(e.L){if(L===0){f=G.exits.reduce((a,b)=>Math.hypot(b.x-e.x,b.y-e.y)<Math.hypot(a.x-e.x,a.y-e.y)?b:a);}else f=garRoute(G,e,L,0);}else f=garRoute(G,e,L,PL);}
+    if(!f)f={x:me.x+5e4,y:me.y+5e4};fk=[player.x,player.y,player.inCar&&player.inCar.x,player.inCar&&player.inCar.y];
+    player.x=f.x;player.y=f.y;if(player.inCar){player.inCar.x=f.x;player.inCar.y=f.y;}if(e.cop||e.hostile||e.gun)e.shootT=Math.max(e.shootT||0,.25);GAR.stats.routed=(GAR.stats.routed||0)+1;}
+  else if(!isP&&e!==player.inCar&&PL===L&&G&&player.active&&((e.cop&&stars>0)||e.hostile)){const f=garLaneOut(G,e,L,me);
+    if(f){fk=[player.x,player.y,player.inCar&&player.inCar.x,player.inCar&&player.inCar.y];player.x=f.x;player.y=f.y;if(player.inCar){player.inCar.x=f.x;player.inCar.y=f.y;}e.shootT=Math.max(e.shootT||0,.25);}}
+  const nb=bullets.length;LVC=L;peds=lp;cars=lc;
+  try{fn();}finally{LVC=0;const np=peds,nc=cars;
+    for(let i=np0;i<np.length;i++)if(np[i]&&np[i].lvl==null){np[i].lvl=L;np[i]._gz=e._gz||0;}for(let i=nc0;i<nc.length;i++)if(nc[i]&&nc[i].lvl==null){nc[i].lvl=L;nc[i]._gz=e._gz||0;}
+    peds=garMerge(sp,lp,lp0,np);cars=garMerge(sc,lc,lc0,nc);
+    if(fk){player.x=fk[0];player.y=fk[1];if(player.inCar){player.inCar.x=fk[2];player.inCar.y=fk[3];}}
+    for(let i=nb;i<bullets.length;i++)if(bullets[i].lvl==null)bullets[i].lvl=L;}}
+updateCar=(o=>function(c,dt){garCall(c,false,()=>o(c,dt));if(GAR.active||c.lvl){garRampTick(c);if(c===player.inCar){player.lvl=c.lvl;player._gz=c._gz;}}})(updateCar);
+updatePed=(o=>function(p,dt){garCall(p,false,()=>o(p,dt));if((GAR.active||p.lvl)&&!p.dead)garRampTick(p);})(updatePed);
+updatePlayer=(o=>function(dt){garCall(player,true,()=>o(dt));if(GAR.active||player.lvl){if(player.inCar){player.lvl=player.inCar.lvl|0;player._gz=player.inCar._gz||0;}else garRampTick(player);}})(updatePlayer);
+carCar=(o=>function(a,c){if((a.lvl|0)!==(c.lvl|0))return;return o(a,c);})(carCar);
+// ---------------------------------------------------------------- deck population + roof jump
+GAR.dim=.16;const GAR_TYPES=['sedan','sport','taxi','van','pickup','compact'];
+function garManage(){for(const G of GAR.list){const d=Math.hypot(focus.x-G.cx,focus.y-G.cy),vis=inView(G.cx,G.cy,200);
+  if(d<1500){for(const s of G.stalls){const c=s.car;if(c&&cars.includes(c)&&!c.wreck&&c.gar===G.id&&Math.hypot(c.x-s.x,c.y-s.y)<60)continue;
+      if(c&&c.gar===G.id&&(c.driver||c.wreck)){c.gar=null;if(!c.missionCar)c.keep=false;}s.car=null;if(vis&&s.filled)continue;
+      if(cars.some(q=>(q.lvl|0)===s.lvl&&Math.hypot(q.x-s.x,q.y-s.y)<26))continue;
+      const ty=GAR_TYPES.filter(k=>CAR_TYPES[k]),k=ty[Math.floor(R()*ty.length)],nc=makeCar(k,s.x,s.y,s.a);nc.lvl=s.lvl;nc._gz=G.H[s.lvl];nc.keep=true;nc.gar=G.id;cars.push(nc);s.car=nc;s.filled=true;}
+    for(const s of G.pedSpots){const p=s.ped;if(p&&peds.includes(p)&&!p.dead&&p.lvl===s.lvl)continue;s.ped=null;if(vis&&s.filled)continue;if(R()<.35&&s.filled)continue;
+      const np=makePed(s.x,s.y,false);np.lvl=s.lvl;np._gz=G.H[s.lvl];np.keep=true;np.gar=G.id;peds.push(np);s.ped=np;s.filled=true;}}
+  else if(d>1900){cars=cars.filter(c=>!(c.gar===G.id&&!c.driver&&c!==player.inCar));peds=peds.filter(p=>!(p.gar===G.id));for(const s of G.stalls){s.car=null;s.filled=false;}for(const s of G.pedSpots){s.ped=null;s.filled=false;}}}}
+function garJump(dt){const c=player.inCar;for(const G of GAR.list){G.kick.cd=Math.max(0,G.kick.cd-dt);
+    if(c&&(c.lvl|0)===2&&!c._rmp&&G.kick.cd<=0&&Math.abs(c.x-G.kick.x)<G.kick.w/2&&Math.abs(c.y-G.kick.y)<G.kick.h/2){const sp=Math.hypot(c.vx,c.vy);
+      if(sp>110){c._air=.8;c._airT=.8;G.kick.cd=6;GAR.stats.jumps=(GAR.stats.jumps||0)+1;const n=GAR.stats.jumps,pay=n<=1?500:150;addMoney(pay);msg('ROOF JUMP!  +$'+pay,'#ffd23a',2.2);sfx('cash');shakeA=Math.max(shakeA,4);}}}
+  for(const q of cars)if(q._air>0)q._air=Math.max(0,q._air-dt);}
+let _garMT=0;
+update=(o=>function(dt){const me=player.inCar||player;GAR.active=GAR.list.some(G=>Math.hypot(focus.x-G.cx,focus.y-G.cy)<1700);
+  if((me.lvl||me._gz)&&!garAt(me.x,me.y,2)){me.lvl=0;me._gz=0;player.lvl=0;player._gz=0;}
+  o(dt);if(state==='play'&&!interior&&GAR.list.length){_garMT-=dt;if(_garMT<=0){_garMT=.5;try{garManage();}catch(e){console.error(e);}}try{garJump(dt);}catch(e){}}})(update);
+startGame=(o=>function(){player.lvl=0;player._gz=0;for(const G of GAR.list){for(const s of G.stalls){s.car=null;s.filled=false;}for(const s of G.pedSpots){s.ped=null;s.filled=false;}}return o.apply(this,arguments);})(startGame);
+// ---------------------------------------------------------------- drawing
+drawCar=(o=>function(c){if((c._gz||0)>.001&&!GAR.drawing)return;if(c._air>0&&GAR.drawing){const t=1-c._air/c._airT,k=1+.32*Math.sin(Math.PI*t);
+    g.fillStyle='rgba(0,0,0,.25)';g.beginPath();g.ellipse(c.x+6*k,c.y+6*k,c.L*.5,c.W*.5,c.a,0,TAU);g.fill();g.save();g.translate(c.x,c.y);g.scale(k,k);g.translate(-c.x,-c.y);o(c);g.restore();return;}return o(c);})(drawCar);
+drawPed=(o=>function(p,G){if((p._gz||0)>.001&&!GAR.drawing&&(!G||G===g))return;return o(p,G);})(drawPed);
+function garQuad(a,b,c,d,col){g.fillStyle=col;g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(b[0],b[1]);g.lineTo(c[0],c[1]);g.lineTo(d[0],d[1]);g.closePath();g.fill();}
+// open side band between heights h0..h1: dark see-through bay, concrete columns, slab edge
+function garBand(G,h0,h1){const S2=[];if(camY<G.y0)S2.push([G.x0,G.y0,G.x1,G.y0]);if(camY>G.y1)S2.push([G.x0,G.y1,G.x1,G.y1]);if(camX<G.x0)S2.push([G.x0,G.y0,G.x0,G.y1]);if(camX>G.x1)S2.push([G.x1,G.y0,G.x1,G.y1]);
+  g.setTransform(1,0,0,1,0,0);for(const [ax,ay,bx,by] of S2){const p0=Pj(ax,ay,h0),p1=Pj(bx,by,h0),q0=Pj(ax,ay,h1),q1=Pj(bx,by,h1);garQuad(p0,p1,q1,q0,'rgba(16,18,24,.58)');
+    const L=Math.hypot(bx-ax,by-ay),n=5;for(let i=0;i<=n;i++){const u=i/n,w=7/L,u0=Math.max(0,u-w/2),u1=Math.min(1,u+w/2),P2=(uu,h)=>Pj(ax+(bx-ax)*uu,ay+(by-ay)*uu,h);garQuad(P2(u0,h0),P2(u1,h0),P2(u1,h1),P2(u0,h1),i%n?'#8d9199':'#9ea2aa');}
+    const e=h1-(h1-h0)*.2;garQuad(Pj(ax,ay,e),Pj(bx,by,e),q1,q0,'#b2b6bd');g.strokeStyle='rgba(0,0,0,.3)';g.lineWidth=1;g.beginPath();g.moveTo(q0[0],q0[1]);g.lineTo(q1[0],q1[1]);g.stroke();}}
+function garRamp(G,r){const H=G.H,hb=H[r.lo],ht=H[r.lo+1],yb=r.dir<0?r.y1:r.y0,yt=r.dir<0?r.y0:r.y1;g.setTransform(1,0,0,1,0,0);
+  const b0=Pj(r.x0,yb,hb),b1=Pj(r.x1,yb,hb),t1=Pj(r.x1,yt,ht),t0=Pj(r.x0,yt,ht);garQuad(b0,b1,t1,t0,'#5f636b');
+  const P2=(u,v)=>{const y=yb+(yt-yb)*v,h=hb+(ht-hb)*v;return Pj(r.x0+(r.x1-r.x0)*u,y,h);};
+  g.strokeStyle='rgba(255,255,255,.55)';g.lineWidth=Math.max(1.5,2*S);for(const v of[.25,.55,.85]){const a=P2(.3,v-.08),m=P2(.5,v),b=P2(.7,v-.08);g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(m[0],m[1]);g.lineTo(b[0],b[1]);g.stroke();}
+  g.strokeStyle='#c4c8ce';g.lineWidth=Math.max(2,3*S);g.beginPath();g.moveTo(b0[0],b0[1]);g.lineTo(t0[0],t0[1]);g.moveTo(b1[0],b1[1]);g.lineTo(t1[0],t1[1]);g.stroke();}
+function garFloor(G,k,dim){const H=G.H[k],gr=G.grid[k],hole=G.ramps.find(r=>r.lo===k-1);setWorld(H);const top=k===2;
+  const pa=new Path2D();for(let y=0;y<10;y++)for(let x=0;x<10;x++){const X=G.x0+x*T,Y=G.y0+y*T;if(hole&&X>=hole.x0&&X<hole.x1&&Y>=hole.y0&&Y<hole.y1)continue;pa.rect(X,Y,T,T);}
+  g.fillStyle=top?'#7c7f86':'#6c6f76';g.fill(pa);
+  if(dim){g.strokeStyle='#c9ccd2';g.lineWidth=5;g.strokeRect(G.x0+2.5,G.y0+2.5,G.x1-G.x0-5,G.y1-G.y0-5);return;}
+  // stall lines
+  g.fillStyle='rgba(240,240,240,.75)';for(const s of G.stalls){if(s.lvl!==k)continue;const v=Math.abs(Math.sin(s.a))>.5;if(v){g.fillRect(s.x-12,s.y-17,1.6,34);g.fillRect(s.x+10.4,s.y-17,1.6,34);}else{g.fillRect(s.x-17,s.y-11,34,1.6);g.fillRect(s.x-17,s.y+9.4,34,1.6);}}
+  // concrete barriers where the deck drops to a ramp
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++){if(!gr[y*10+x])continue;const X=G.x0+x*T,Y=G.y0+y*T;if(hole&&X>=hole.x0&&X<hole.x1&&Y>=hole.y0&&Y<hole.y1)continue;
+    g.fillStyle='#5a5d63';g.fillRect(X,Y,T,T);g.fillStyle='#d8b030';for(let i=-T;i<T;i+=10){g.beginPath();g.moveTo(X+Math.max(0,i),Y+Math.max(0,-i));g.lineTo(X+Math.min(T,i+T),Y+Math.min(T,T-i));g.lineTo(X+Math.min(T,i+T+4),Y+Math.min(T,T-i-4));g.lineTo(X+Math.max(0,i+4),Y+Math.max(0,-i-4));g.closePath();g.fill();}
+    g.strokeStyle='rgba(0,0,0,.35)';g.lineWidth=1;g.strokeRect(X+.5,Y+.5,T-1,T-1);}
+  if(top){g.fillStyle='rgba(255,255,255,.22)';g.font='bold 44px '+FONT;g.textAlign='center';g.textBaseline='middle';g.fillText('P',G.x0+6.9*T,G.y0+8.4*T);
+    const K=G.kick;g.fillStyle='#d8a018';g.fillRect(K.x-K.w/2,K.y-K.h/2,K.w,K.h);g.fillStyle='#2a2208';for(let i=0;i<3;i++){const x=K.x-K.w/2+6+i*13;g.beginPath();g.moveTo(x,K.y-9);g.lineTo(x+8,K.y);g.lineTo(x,K.y+9);g.lineTo(x+3,K.y);g.closePath();g.fill();}
+    g.strokeStyle='#fff3b0';g.lineWidth=1.5;g.strokeRect(K.x-K.w/2,K.y-K.h/2,K.w,K.h);}
+  // parapet
+  g.strokeStyle=top?'#c9ccd2':'#a6aab1';g.lineWidth=5;g.strokeRect(G.x0+2.5,G.y0+2.5,G.x1-G.x0-5,G.y1-G.y0-5);g.strokeStyle='rgba(0,0,0,.25)';g.lineWidth=1;g.strokeRect(G.x0+5.5,G.y0+5.5,G.x1-G.x0-11,G.y1-G.y0-11);}
+function garDraw(pb){const G=pb.garage,H=G.H,me=player.inCar||player,inside=garAt(me.x,me.y,6)===G&&player.active,pz=inside?(me._gz||0):-1;
+  const ents=[];for(const c of cars)if((c._gz||0)>.001&&inView(c.x,c.y,60)&&garAt(c.x,c.y,10)===G)ents.push(c);for(const p of peds)if((p._gz||0)>.001&&inView(p.x,p.y,30)&&garAt(p.x,p.y,10)===G)ents.push(p);
+  const pOn=player.active&&!player.inCar&&(player._gz||0)>.001&&garAt(player.x,player.y,10)===G;
+  const R=typeof TKR==='function'?TKR():null,tk=typeof TK8!=='undefined'&&TK8.list?TK8.list.filter(k=>k.lvl&&garAt(k.x,k.y,0)===G&&!R.got[k.key]):[];
+  let above=0;for(let k=1;k<=2;k++){const up=inside&&H[k]>pz+.004;if(up&&++above>1)break;const al=up?GAR.dim:1;g.globalAlpha=al;GAR.dimNow=up;
+    garBand(G,H[k-1],H[k]);const r=G.ramps.find(r=>r.lo===k-1);if(r){g.globalAlpha=inside&&me._rmp===r?1:al;garRamp(G,r);g.globalAlpha=al;}garFloor(G,k,up);
+    GAR.drawing=true;try{for(const e of ents){const z=e._gz;if(z>H[k-1]+.001&&z<=H[k]+.001){g.globalAlpha=(inside&&z>pz+.004)?GAR.dim:1;setWorld(z);if(e.L)drawCar(e);else drawPed(e);}}g.globalAlpha=1;
+      if(pOn&&player._gz>H[k-1]+.001&&player._gz<=H[k]+.001){setWorld(player._gz);drawPed(player);g.strokeStyle='rgba(255,240,80,.6)';g.lineWidth=1;g.beginPath();g.arc(player.x,player.y,8,0,TAU);g.stroke();}
+      const pc=player.inCar;if(pc&&(pc._gz||0)>H[k-1]+.001&&pc._gz<=H[k]+.001&&garAt(pc.x,pc.y,10)===G){setWorld(pc._gz);g.strokeStyle='rgba(255,240,80,'+(.35+.25*Math.sin(gtime*6))+')';g.lineWidth=1;g.beginPath();g.arc(pc.x,pc.y,pc.L*.62,0,TAU);g.stroke();}
+      if(k===2&&tk.length){setWorld(H[2]);for(const t of tk)if(inView(t.x,t.y,30))drawTok8(t);}}finally{GAR.drawing=false;}}
+  g.globalAlpha=1;g.setTransform(1,0,0,1,0,0);}
+// minimap: a big readable P on the garage
+drawMiniFish6=(o=>function(M,u,mx0,my0,mw,mh){o(M,u,mx0,my0,mw,mh);try{for(const G of GAR.list){const [x,y]=M(G.cx,G.cy);if(x<mx0-8||x>mx0+mw+8||y<my0-8||y>my0+mh+8)continue;const s=7*u;
+    ctx.fillStyle='#1f5fd0';ctx.strokeStyle='#fff';ctx.lineWidth=1.2*u;ctx.beginPath();ctx.rect(x-s,y-s,2*s,2*s);ctx.fill();ctx.stroke();ctx.fillStyle='#fff';ctx.font='bold '+Math.round(11*u)+'px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('P',x,y+.5*u);}}catch(e){}})(drawMiniFish6);
+window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get gar(){return{GAR,garAt,garTile,garRampTick,garRoute,garLists,garManage,garDraw};}}));
+// HUD: which deck you are on (big, readable)
+const GAR_LVN=['GROUND LEVEL','LEVEL 2','ROOF'];
+drawHUD=(o=>function(){o();try{if(state!=='play'||interior||menu||phone.open||fade)return;const me=player.inCar||player,G=garAt(me.x,me.y,0);if(!G)return;
+  const u=U*(TOUCHUI?1.15:1),L=me.lvl|0,txt=(me._rmp?'RAMP':GAR_LVN[L]),sub=G.label;let fs=Math.round(24*u);ctx.save();ctx.font='bold '+fs+'px '+FONT;
+  while(ctx.measureText(sub+'  '+txt).width>W*.8&&fs>12){fs--;ctx.font='bold '+fs+'px '+FONT;}
+  const t2=sub+'  \u2022  '+txt,w=ctx.measureText(t2).width+34*u,h=fs*1.6,x=W/2,y=H*(TOUCHUI?.21:.19);
+  ctx.fillStyle='rgba(8,16,40,.78)';ctx.strokeStyle='#5aa0ff';ctx.lineWidth=2.5*u;ctx.beginPath();ctx.roundRect?ctx.roundRect(x-w/2,y-h/2,w,h,10*u):ctx.rect(x-w/2,y-h/2,w,h);ctx.fill();ctx.stroke();
+  ctx.textAlign='center';ctx.textBaseline='middle';outline(t2,x,y+1*u,'#ffffff',4*u);ctx.restore();}catch(e){}})(drawHUD);
 
 </script></body></html>
