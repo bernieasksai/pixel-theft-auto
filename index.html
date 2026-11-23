@@ -2016,7 +2016,7 @@ updatePed=(o=>function(p,dt){if(p.dive>0&&!p.dead&&p.state==='flee'){p.dive-=dt;
 //  causeways to a South Beach barrier island (Collins Ave / Ocean Drive,
 //  beach, Atlantic). South: Port of Miami (containers, cranes, piers).
 // ======================================================================
-var WMODE=0,BRIDGE5=null,RAIL5=null,FOAM5=null,PRE5=null;
+var WMODE=0,BRIDGE5=null,RAIL5=null,FOAM5=null,PRE5=null,WET5=null;
 const SEA=9,SAND=10,DOCK=11,V5X0=146,V5Y0=146;
 const M5={bay:[160,175],isl:{x0:176,x1:203,y0:20,y1:131},ocean:204,portY:[146,170],seaY:171,marina:{x0:160,x1:168,y0:77,y1:94},
   deco:[],moor:[],cranes:[],ship:null,stats:{}};
@@ -2026,6 +2026,7 @@ function v5Span(ax,i){
   if(i<=10)return[2,4,6,8,10].includes(i)?[0,16]:[0,10];if(i>=12&&i<=14)return[2,13];return null;}
 function distAt5(x,y){const tx=x/T,ty=y/T;if(tx<122&&ty<122)return(tx<61?0:1)+(ty<61?0:2);
   if(tx>=150&&tx<170&&ty>=75&&ty<97)return 6;
+  if(tx>=196&&tx<206&&ty>=20&&ty<132)return 12;
   if(tx>=206)return 11;
   if(tx>=192&&tx<206&&ty>=18&&ty<136)return 8;
   if(tx>=174&&tx<192&&ty>=18&&ty<136)return 7;
@@ -2038,7 +2039,8 @@ function v5Ground(){
   DISTRICTS.push({name:'BAYSIDE',park:0,lot:0,water:0,hmin:.3,hmax:.6,big:0,walls:['#8fb4c8']},{name:'MARINA',park:0,lot:0,water:0,hmin:.1,hmax:.2,big:0,walls:['#e0e0d8']},
     {name:'SOUTH BEACH',park:0,lot:0,water:0,hmin:.12,hmax:.24,big:0,walls:['#f4b8c8']},{name:'OCEAN DRIVE',park:0,lot:0,water:0,hmin:.12,hmax:.24,big:0,walls:['#a8e6d8']},
     {name:'PORT OF MIAMI',park:0,lot:0,water:0,hmin:.08,hmax:.14,big:0,walls:['#7a8088']},{name:'BISCAYNE BAY',park:0,lot:0,water:0,hmin:.1,hmax:.1,big:0,walls:['#888']},
-    {name:'ATLANTIC OCEAN',park:0,lot:0,water:0,hmin:.1,hmax:.1,big:0,walls:['#888']});
+    {name:'ATLANTIC OCEAN',park:0,lot:0,water:0,hmin:.1,hmax:.1,big:0,walls:['#888']},
+    {name:'SOUTH BEACH SANDS',park:0,lot:0,water:0,hmin:.1,hmax:.1,big:0,walls:['#f4b8c8']});
   for(let ty=0;ty<N;ty++)for(let tx=0;tx<N;tx++)if(tx>=V5X0||ty>=V5Y0)map[ty*N+tx]=SEA;
   v5Fill(144,0,159,170,GRASS);          // Bayside mainland (+ Biscayne Blvd column)
   v5Fill(0,146,159,170,LOT);            // port land
@@ -2119,10 +2121,23 @@ function v5Dress(){const rnd=mulberry32(5150),rp=a=>a[Math.floor(rnd()*a.length)
   M5.stats.buildings5=buildings.filter(b=>b.m5).length;
   // palms along Sunset Blvd (city) sidewalks
   for(let x=4;x<CITYN-2;x+=4)for(const y of[70,75]){const t=tileAt(x,y);if(t===SIDE&&x%P>2&&x%P<P-1)palm((x+.5)*T,(y+.5)*T);}
+  // ---- v5b: beach extras (own RNG so the rest of the map stays identical)
+  {const r2=mulberry32(9191),rp2=a=>a[Math.floor(r2()*a.length)],SK=['#f0c8a0','#d8a070','#a06a40','#6a4028','#f4d4b8'],SW=['#ff3060','#2060ff','#ffe020','#20c080','#ff7a20','#c040ff','#111'];
+    const gy=M5.deco.filter(d=>d.k==='guard').map(d=>d.y/T);M5.beach={nets:[],castles:0,bathers:0};
+    for(const d of M5.deco)if(d.k==='towel'&&r2()<.6){d.bath={skin:rp2(SK),suit:rp2(SW),hair:rp2(['#2a1a0a','#6a4a20','#e8c870','#111','#a03a1a']),fl:r2()<.5};M5.beach.bathers++;}
+    for(let i=0;i<22;i++){const x=(197+r2()*5.2)*T,y=(I.y0+2+r2()*(I.y1-I.y0-4))*T;if(gy.some(v=>Math.abs(v*T-y)<40&&Math.abs(200.3*T-x)<40))continue;
+      M5.deco.push({k:'towel',x,y,c:rp2(['#ff4060','#40a0ff','#ffe040','#40e090','#ff9a30','#f0f0f0','#d050ff']),a:PI/2+rr2(r2,-.3,.3),bath:{skin:rp2(SK),suit:rp2(SW),hair:rp2(['#2a1a0a','#6a4a20','#e8c870','#111']),fl:r2()<.5}});M5.beach.bathers++;}
+    for(const ny of[48,108]){M5.deco.push({k:'vball',x:198.6*T,y:ny*T});M5.beach.nets.push({x:198.6*T,y:ny*T});}
+    for(let i=0;i<8;i++){M5.deco.push({k:'castle',x:(201.6+r2()*1.4)*T,y:(I.y0+4+r2()*(I.y1-I.y0-8))*T,s:.8+r2()*.5});M5.beach.castles++;}
+    for(let y=I.y0+3;y<I.y1-2;y+=4){if(gy.some(v=>Math.abs(v-y-.5)<1.6))continue;if(Math.abs(y-48)<4||Math.abs(y-108)<4)continue;palm(196.75*T,(y+.5)*T);}}
   // foam mask (sea tiles that touch land)
   FOAM5=new Uint8Array(N*N);for(let ty=0;ty<N;ty++)for(let tx=0;tx<N;tx++){const k=ty*N+tx;if(map[k]!==SEA)continue;let m=0;
-    for(let d=0;d<4;d++){const x=tx+DX[d],y=ty+DY[d];if(x<0||y<0||x>=N||y>=N)continue;const j=y*N+x,t=map[j];if(t!==SEA&&!BRIDGE5[j])m|=1<<d;}FOAM5[k]=m;}}
-function v5Mini(id){for(let i=0;i<N*N;i++)if(BRIDGE5&&BRIDGE5[i]){id.data[i*4]=120;id.data[i*4+1]=120;id.data[i*4+2]=128;}}
+    for(let d=0;d<4;d++){const x=tx+DX[d],y=ty+DY[d];if(x<0||y<0||x>=N||y>=N)continue;const j=y*N+x,t=map[j];if(t!==SEA&&!BRIDGE5[j])m|=1<<d;}FOAM5[k]=m;}
+  WET5=new Uint8Array(N*N);for(let ty=1;ty<N-1;ty++)for(let tx=1;tx<N-1;tx++){const k=ty*N+tx;if(map[k]!==SAND)continue;let m=0;for(let d=0;d<4;d++){if(map[(ty+DY[d])*N+tx+DX[d]]===SEA)m|=1<<d;}WET5[k]=m;}}
+function rr2(r,a,b){return a+r()*(b-a);}
+function v5Mini(id){for(let i=0;i<N*N;i++){if(BRIDGE5&&BRIDGE5[i]){id.data[i*4]=120;id.data[i*4+1]=120;id.data[i*4+2]=128;}
+    else if(map[i]===SAND){const w=WET5&&WET5[i];id.data[i*4]=w?205:240;id.data[i*4+1]=w?178:212;id.data[i*4+2]=w?120:140;}
+    else if(map[i]===SEA&&FOAM5&&FOAM5[i]){let s=false;for(let d=0;d<4;d++){const j=i+DX[d]+DY[d]*N;if(j>=0&&j<N*N&&map[j]===SAND)s=true;}if(s){id.data[i*4]=150;id.data[i*4+1]=205;id.data[i*4+2]=235;}}}}
 // tile solidity with the current water mode: 0 land things (sea solid), 1 swimmer, 2 boat (only sea + under bridges), 3 player car (sea ok, bridge rails solid)
 function solidAt(tx,ty){const t=tileAt(tx,ty);if(!WMODE)return t===BLD||t===WATER||t===SEA;
   if(WMODE===2){if(t===SEA)return false;if(t===ROAD&&BRIDGE5&&BRIDGE5[ty*N+tx])return false;return true;}
@@ -2290,7 +2305,12 @@ function renderChunk(cx,cy){
           if(tx>=160&&tx<176&&ty<146){r+=4;gg+=16;bb+=4;}
           if(f){const e=Math.min(f&1?T-1-lx:99,f&2?T-1-ly:99,f&4?lx:99,f&8?ly:99);if(e<9){const a=(9-e)/9;r+=(150-r)*a*.55;gg+=(200-gg)*a*.55;bb+=(210-bb)*a*.5;}}
           if(BRIDGE5&&ty>0&&BRIDGE5[(ty-1)*N+tx]&&ly<10){r*=.6;gg*=.6;bb*=.65;}break;}
-        case 10:r=214+n*20;gg=194+n*18;bb=136+n*16;if(hash2(wx>>1,wy>>1)>.97){r-=30;gg-=30;bb-=24;}break;
+        case 10:{const h1=hash2(wx*3+1,wy*7+2),h2=hash2(wx>>1,wy>>1);r=226+n*14;gg=198+n*12;bb=140+n*12;
+          const rip=Math.sin(wx*.42+Math.sin(wy*.09+wx*.013)*2.6);if(rip>.9){r-=9;gg-=9;bb-=8;}else if(rip<-.97){r+=5;gg+=5;bb+=4;}
+          if(h2>.972){r-=36;gg-=34;bb-=26;}else if(h1>.995){r=252;gg=246;bb=232;}else if(h1<.0035){r=240;gg=176;bb=166;}else if(h1<.007){r-=22;gg-=26;bb-=30;}
+          const wm=WET5?WET5[ty*N+tx]:0;if(wm){const e=Math.min(wm&1?T-1-lx:99,wm&2?T-1-ly:99,wm&4?lx:99,wm&8?ly:99);const W2=29+3*Math.sin(wy*.21+wx*.05);
+            if(e<W2){const a=Math.min(1,(W2-e)/W2);r+=(166-r)*a*.85;gg+=(134-gg)*a*.85;bb+=(92-bb)*a*.8;if(e<5){r+=(232-r)*.35;gg+=(236-gg)*.35;bb+=(228-bb)*.35;}else if(h1>.97&&a>.4){r+=20;gg+=22;bb+=24;}}}
+          break;}
         case 11:{v=(wy>>3)&1;const sp=(wx%32)<2||(ly%8===0);r=150+n*14-(sp?40:0);gg=112+n*10-(sp?32:0);bb=70+n*8-(sp?24:0);if(v){r-=8;gg-=6;}break;}
         default:r=gg=bb=30;}
       const i=(py*CHP+px)*4;d[i]=r;d[i+1]=gg;d[i+2]=bb;d[i+3]=255;}}
@@ -3812,6 +3832,13 @@ function drawSea5(tx0,tx1,ty0,ty1){if(!FOAM5)return;const tt=gtime;
   for(let ty=ty0;ty<=ty1;ty++)for(let tx=tx0;tx<=tx1;tx++){const k=ty*N+tx,f=FOAM5[k];if(!f)continue;const ph=tt*1.7+(tx+ty)*.8,e=2+2*Math.sin(ph),a=.32+.22*Math.sin(ph*1.3);
     g.fillStyle='rgba(255,255,255,'+a.toFixed(2)+')';const x=tx*T,y=ty*T;
     if(f&1)g.fillRect(x+T-e-3,y,3,T);if(f&2)g.fillRect(x,y+T-e-3,T,3);if(f&4)g.fillRect(x+e,y,3,T);if(f&8)g.fillRect(x,y+e,T,3);}
+  // swash: foamy water washing up the beach (sea tiles whose land neighbour is sand)
+  for(let ty=ty0;ty<=ty1;ty++)for(let tx=tx0;tx<=tx1;tx++){const k=ty*N+tx,f=FOAM5[k];if(!f)continue;
+    for(let d=0;d<4;d++){if(!(f&(1<<d)))continue;const nx=tx+DX[d],ny=ty+DY[d];if(map[ny*N+nx]!==SAND)continue;
+      const x=tx*T,y=ty*T,ax=DX[d],ay=DY[d],P=[];for(let q=0;q<=8;q++){const u=q*T/8,gpos=(ax?y:x)+u,w=.5+.5*Math.sin(tt*.8+gpos*.045+Math.sin(gpos*.011)*2),rch=4+15*w;
+        P.push([u,rch]);}const pt=(u,h)=>ax?[ax>0?x+T+h:x-h,y+u]:[x+u,ay>0?y+T+h:y-h];
+      g.fillStyle='rgba(235,248,255,.42)';g.beginPath();let a=pt(0,-6);g.moveTo(a[0],a[1]);for(const [u,h] of P){a=pt(u,h);g.lineTo(a[0],a[1]);}a=pt(T,-6);g.lineTo(a[0],a[1]);g.closePath();g.fill();
+      g.strokeStyle='rgba(255,255,255,.8)';g.lineWidth=1.6;g.beginPath();a=pt(0,P[0][1]);g.moveTo(a[0],a[1]);for(const [u,h] of P){a=pt(u,h);g.lineTo(a[0],a[1]);}g.stroke();}}
   // wakes
   g.lineWidth=1.4;for(const w of wakes5){if(!inView(w.x,w.y,40))continue;const k=w.t/1.8,al=(1-k)*.55*(.4+.6*w.s),sp=w.w*(1+k*2.4),ca=Math.cos(w.a),sa=Math.sin(w.a);
     g.strokeStyle='rgba(235,250,255,'+al.toFixed(2)+')';g.beginPath();g.moveTo(w.x-sa*sp-ca*k*6,w.y+ca*sp-sa*k*6);g.lineTo(w.x+sa*sp-ca*k*6,w.y-ca*sp-sa*k*6);g.stroke();
@@ -3840,7 +3867,9 @@ renderChunk=(o=>function(cx,cy){const c=o(cx,cy);if(!BRIDGE5||!V4READY)return c;
       q.fillStyle='#9a9a98';for(let z=2;z<T;z+=8)q.fillRect(ox+z,oy+y-(y?1:0),2,4);}}
   return c;})(renderChunk);
 drawPOIGround=(o=>function(){o();
-  for(const d of M5.deco){if(!inView(d.x,d.y,40))continue;if(d.k==='towel'){g.save();g.translate(d.x,d.y);g.rotate(d.a);g.fillStyle=d.c;g.fillRect(-7,-3.5,14,7);g.fillStyle='rgba(255,255,255,.5)';g.fillRect(-7,-1,14,1.2);g.restore();}
+  for(const d of M5.deco){if(!inView(d.x,d.y,40))continue;if(d.k==='towel'){g.save();g.translate(d.x,d.y);g.rotate(d.a);g.fillStyle=d.c;g.fillRect(-7,-3.5,14,7);g.fillStyle='rgba(255,255,255,.5)';g.fillRect(-7,-1,14,1.2);if(d.bath)v5Bather(d.bath);g.restore();}
+    else if(d.k==='vball'){g.strokeStyle='rgba(255,255,255,.7)';g.lineWidth=1;g.strokeRect(d.x-26,d.y-50,52,100);g.fillStyle='rgba(0,0,0,.18)';g.fillRect(d.x-27,d.y+3,54,2);}
+    else if(d.k==='castle'){v5Castle(d);}
     else if(d.k==='guard'){g.fillStyle='rgba(0,0,0,.25)';g.fillRect(d.x-10,d.y-6,24,18);g.fillStyle='#c8a870';g.fillRect(d.x-14,d.y+2,8,3);}}
   for(const o2 of pois){if(o2.type!=='court')continue;const s=o2.spot;if(!inView(s.x,s.y,80))continue;const nx=o2.n[0],ny=o2.n[1],px=-ny,py=nx;
     for(let i=0;i<3;i++){g.fillStyle=i%2?'#d8d2c0':'#c8c2b0';const cx=s.x-nx*(10-i*5),cy=s.y-ny*(10-i*5),w=46-i*6;g.fillRect(cx-Math.abs(px)*w/2-Math.abs(nx)*2.5,cy-Math.abs(py)*w/2-Math.abs(ny)*2.5,Math.abs(px)*w+Math.abs(nx)*5,Math.abs(py)*w+Math.abs(ny)*5);}}})(drawPOIGround);
@@ -3981,10 +4010,24 @@ function v5Room(o){const t=o.type,k=SHOP5[t],col=POI_DEF[t].col;const r={poi:o,t
   r.door={x:r.w/2,y:r.h-4};r.spots.push({x:r.w/2,y:r.h-12,r:18,key:'E',label:'Exit to the street',act:exitInterior});return r;}
 buildRoom=(o=>function(q){if(SHOP5[q.type])return v5Room(q);return o(q);})(buildRoom);
 // ---------------------------------------------------------------- beach peds
-spawnPed=(o=>function(r0,r1){o(r0,r1);if(R()<.35){const d=distAt5(focus.x,focus.y);if(d===7||d===8){const s=ringTile(r0,r1,t=>t===SAND);if(s){const p=makePed(s.x+rr(-8,8),s.y+rr(-8,8),false);p.beach=true;peds.push(p);}}}})(spawnPed);
+spawnPed=(o=>function(r0,r1){o(r0,r1);const d0=distAt5(focus.x,focus.y);if(R()<(d0===12?.6:.35)){const d=d0;if(d===7||d===8||d===12){const s=ringTile(r0,r1,t=>t===SAND);if(s){const p=makePed(s.x+rr(-8,8),s.y+rr(-8,8),false);p.beach=true;peds.push(p);}}}})(spawnPed);
 // ---------------------------------------------------------------- debug / tests
 window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get m5(){return{V5,M5,ROUTES5,makeBoat,spawnCopBoat5,spawnCruiser5,v5Moor,waterAt5,seaAt5,solidAt,
   get WMODE(){return WMODE;},BRIDGE5,RAIL5,FOAM5,wakes5,POI5,SEA,SAND,DOCK,payFines5,finePrice5,v5Room,distAt5};}}));
+// ---------------------------------------------------------------- v5b: the beach (sunbathers, volleyball, sandcastles, sand driving)
+function v5Bather(b){g.fillStyle=b.skin;g.fillRect(-5.5,-1.6,3,1.1);g.fillRect(-5.5,.5,3,1.1);g.fillRect(-2.6,-2.2,6.2,4.4);g.fillStyle=b.suit;g.fillRect(-2.8,-2.3,2.6,4.6);if(b.fl)g.fillRect(1.6,-2.3,1.6,4.6);
+  g.fillStyle=b.skin;g.fillRect(-.4,-3.6,3.4,1);g.fillRect(-.4,2.6,3.4,1);g.beginPath();g.arc(5,0,2.1,0,TAU);g.fill();g.fillStyle=b.hair;g.beginPath();g.arc(5.6,0,1.9,-PI/2,PI/2);g.fill();g.fillStyle='rgba(20,20,20,.85)';g.fillRect(4.4,-1.4,.9,2.8);}
+function v5Castle(d){const s=d.s;g.save();g.translate(d.x,d.y);g.scale(s,s);g.fillStyle='rgba(120,90,50,.3)';g.fillRect(-7,-5,15,12);g.fillStyle='#c8a468';g.fillRect(-6,-6,12,11);g.fillStyle='#d8b87a';
+  for(const [x,y] of[[-6,-6],[3,-6],[-6,2],[3,2]])g.fillRect(x,y,3,3);g.fillStyle='#b08a50';g.fillRect(-2,-2,4,4);g.fillStyle='#ff4060';g.fillRect(-.3,-5,.8,3);g.fillRect(.5,-5,2,1.2);g.restore();}
+drawWorldOverlays=(o=>function(){o();setWorld(.05);g.lineWidth=1;for(const n of M5.beach?M5.beach.nets:[]){if(!inView(n.x,n.y,70))continue;g.fillStyle='#e0e0e0';g.fillRect(n.x-28,n.y-1,56,2);
+    g.strokeStyle='rgba(30,30,30,.55)';for(let x=-26;x<=26;x+=4){g.beginPath();g.moveTo(n.x+x,n.y-1.5);g.lineTo(n.x+x,n.y+1.5);g.stroke();}g.fillStyle='#555';g.fillRect(n.x-30,n.y-2,3,4);g.fillRect(n.x+27,n.y-2,3,4);
+    const bx=n.x+Math.sin(gtime*1.3)*14,by=n.y+Math.cos(gtime*.7)*30;g.fillStyle='rgba(0,0,0,.2)';g.beginPath();g.arc(bx+2,by+2,2.2,0,TAU);g.fill();setWorld(.05+Math.abs(Math.sin(gtime*1.4))*.08);g.fillStyle='#fff';g.beginPath();g.arc(bx,by,2.2,0,TAU);g.fill();g.fillStyle='#ffd040';g.fillRect(bx-2.2,by-.5,4.4,1);setWorld(.05);}
+  setWorld(0);})(drawWorldOverlays);
+const SANDV5={stats:{sandFrames:0}};
+carPhysics=(o=>function(c,dt){o(c,dt);if(c.boat||c.sink>0)return;const t=tileW(c.x,c.y);if(t!==SAND)return;SANDV5.stats.sandFrames++;
+  const sp=Math.hypot(c.vx,c.vy),cap=c.max*.4;let k=Math.exp(-1.4*dt);if(sp>cap)k*=Math.exp(-2.6*dt*(sp-cap)/Math.max(1,sp));c.vx*=k;c.vy*=k;
+  if(sp>40&&R()<dt*30)addP(c.x-Math.cos(c.a)*c.L/2+rr(-4,4),c.y-Math.sin(c.a)*c.L/2+rr(-4,4),-c.vx*.15+rr(-25,25),-c.vy*.15+rr(-25,25),rr(.3,.6),3,pick(['#d8bc84','#e6cc98','#c8a870']),false);})(carPhysics);
+window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get beach(){return{SANDV5,WET5,M5,distAt5,SAND,SEA};}}));
 
 // ======================================================================
 //  v5f: FISHING - spots on docks / piers / marina / port / beach, or from a
