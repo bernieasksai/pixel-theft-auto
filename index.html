@@ -4646,11 +4646,13 @@ function garBuild(){if(GAR.list.length)return;try{
     // parked stalls per deck (u,v in tiles, a angle)
     const ST=[[0,1.0,1.3,PI/2],[0,2.4,1.3,-PI/2],[0,3.8,1.3,PI/2],[0,1.2,8.3,-PI/2],[0,4.2,8.3,PI/2],
       [1,3.7,8.4,-PI/2],[1,5.3,8.4,PI/2],[1,4.6,0.6,0],
-      [2,4.6,1.3,PI/2],[2,6.0,1.3,-PI/2],[2,7.4,1.3,PI/2],[2,8.8,1.3,PI/2],[2,0.9,8.3,0]];
+      [2,7.4,1.3,PI/2],[2,8.8,1.3,-PI/2],[2,8.8,4.3,PI/2],[2,8.8,6.0,-PI/2],[2,0.9,8.3,0]];
     for(const [L,u,v,a] of ST)G.stalls.push({lvl:L,x:X0+u*T,y:Y0+v*T,a,car:null,filled:false});
-    G.pedSpots=[[1,4.5,5.0],[1,9.4,0.7],[2,6.2,6.6],[2,4.0,8.6],[2,8.4,3.8]].map(([L,u,v])=>({lvl:L,x:X0+u*T,y:Y0+v*T,ped:null}));
+    G.pedSpots=[[1,4.5,5.0],[1,9.4,0.7],[2,7.6,5.2],[2,7.6,7.4],[2,7.2,3.3]].map(([L,u,v])=>({lvl:L,x:X0+u*T,y:Y0+v*T,ped:null}));
     G.tok={x:X0+9.5*T,y:Y0+7.5*T,tx:rx+9,ty:ry+7,lvl:2};
-    G.kick={x:X0+6.5*T,y:Y0+5*T,w:44,h:30,cd:0};
+    // v6j: roof jump on the north parapet, fed by a straight north-bound runway down the middle of the roof (x4-6, rows 9->1: ~8 tiles,
+    // clear of both ramp lanes and the stalls); you launch over the street into the park across the road
+    G.kick={x:X0+5*T,y:Y0+1.05*T,w:84,h:40,cd:0,dx:0,dy:-1};G.runway={x0:X0+4*T,x1:X0+6*T,y0:Y0+1.7*T,y1:Y0+10*T};
     // pseudo-building so it joins the far-to-near building sort
     const pb={x0:X0,y0:Y0,x1:X1,y1:Y1,h:GAR.H[2],floors:3,seed:777+G.id,det:[],garage:G,wN:'#8c9098',wS:'#8c9098',wE:'#7c8088',wW:'#7c8088',roof:'#6e7178',rim:'#55585e'};
     buildings.push(pb);G.bd=pb;GAR.list.push(G);
@@ -5071,10 +5073,10 @@ function garCall(e,isP,fn){if(!GAR.active)return fn();
     peds=garMerge(sp,lp,lp0,np);cars=garMerge(sc,lc,lc0,nc);
     if(fk){player.x=fk[0];player.y=fk[1];if(player.inCar){player.inCar.x=fk[2];player.inCar.y=fk[3];}}
     for(let i=nb;i<bullets.length;i++)if(bullets[i].lvl==null)bullets[i].lvl=L;}}
-updateCar=(o=>function(c,dt){garCall(c,false,()=>o(c,dt));if(GAR.active||c.lvl){garRampTick(c);if(c===player.inCar){player.lvl=c.lvl;player._gz=c._gz;}}})(updateCar);
+updateCar=(o=>function(c,dt){if(c._fly){try{garFlyStep(c,dt);}catch(e){c._fly=null;c._gz=0;}return;}garCall(c,false,()=>o(c,dt));if(GAR.active||c.lvl){garRampTick(c);if(c===player.inCar){player.lvl=c.lvl;player._gz=c._gz;}}})(updateCar);
 updatePed=(o=>function(p,dt){garCall(p,false,()=>o(p,dt));if((GAR.active||p.lvl)&&!p.dead)garRampTick(p);})(updatePed);
 updatePlayer=(o=>function(dt){garCall(player,true,()=>o(dt));if(GAR.active||player.lvl){if(player.inCar){player.lvl=player.inCar.lvl|0;player._gz=player.inCar._gz||0;}else garRampTick(player);}})(updatePlayer);
-carCar=(o=>function(a,c){if((a.lvl|0)!==(c.lvl|0))return;return o(a,c);})(carCar);
+carCar=(o=>function(a,c){if((a.lvl|0)!==(c.lvl|0)||a._fly||c._fly)return;return o(a,c);})(carCar);
 // ---------------------------------------------------------------- deck population + roof jump
 GAR.dim=.16;const GAR_TYPES=['sedan','sport','taxi','van','pickup','compact'];
 function garManage(){for(const G of GAR.list){const d=Math.hypot(focus.x-G.cx,focus.y-G.cy),vis=inView(G.cx,G.cy,200);
@@ -5085,13 +5087,31 @@ function garManage(){for(const G of GAR.list){const d=Math.hypot(focus.x-G.cx,fo
     for(const s of G.pedSpots){const p=s.ped;if(p&&peds.includes(p)&&!p.dead&&p.lvl===s.lvl)continue;s.ped=null;if(vis&&s.filled)continue;if(R()<.35&&s.filled)continue;
       const np=makePed(s.x,s.y,false);np.lvl=s.lvl;np._gz=G.H[s.lvl];np.keep=true;np.gar=G.id;peds.push(np);s.ped=np;s.filled=true;}}
   else if(d>1900){cars=cars.filter(c=>!(c.gar===G.id&&!c.driver&&c!==player.inCar));peds=peds.filter(p=>!(p.gar===G.id));for(const s of G.stalls){s.car=null;s.filled=false;}for(const s of G.pedSpots){s.ped=null;s.filled=false;}}}}
-function garJump(dt){const c=player.inCar;for(const G of GAR.list){G.kick.cd=Math.max(0,G.kick.cd-dt);
-    if(c&&(c.lvl|0)===2&&!c._rmp&&G.kick.cd<=0&&Math.abs(c.x-G.kick.x)<G.kick.w/2&&Math.abs(c.y-G.kick.y)<G.kick.h/2){const sp=Math.hypot(c.vx,c.vy);
-      if(sp>110){c._air=.8;c._airT=.8;G.kick.cd=6;GAR.stats.jumps=(GAR.stats.jumps||0)+1;const n=GAR.stats.jumps,pay=n<=1?500:150;addMoney(pay);msg('ROOF JUMP!  +$'+pay,'#ffd23a',2.2);sfx('cash');shakeA=Math.max(shakeA,4);}}}
-  for(const q of cars)if(q._air>0)q._air=Math.max(0,q._air-dt);}
+// v6j: roof jump - hit the kicker heading east at speed and the car launches off the roof, flies over the parapet and lands on the street
+function garJump(dt){const c=player.inCar;for(const G of GAR.list){const K=G.kick;K.cd=Math.max(0,K.cd-dt);
+    if(c&&!c._fly&&!c.boat&&(c.lvl|0)===2&&!c._rmp&&K.cd<=0&&Math.abs(c.x-K.x)<K.w/2&&Math.abs(c.y-K.y)<K.h/2){const sp=Math.hypot(c.vx,c.vy);
+      if(sp>110&&(c.vx*K.dx+c.vy*K.dy)>sp*.55)garLaunch(c,G,sp);}}}
+function garLaunch(c,G,sp){const v=Math.max(190,Math.min(240,sp)),T=.32+v/700;const ux=c.vx/sp,uy=c.vy/sp;
+  c._fly={t:0,T,z0:G.H[2],vx:ux*v,vy:uy*v,G,pay:true};c._jumped=true;c._air=T;c._airT=T;c.lvl=0;c._rmp=null;G.kick.cd=4;GAR.stats.launches=(GAR.stats.launches||0)+1;
+  if(c===player.inCar){player.lvl=0;}shakeA=Math.max(shakeA,3);try{sfx('crash');}catch(e){}}
+// flight step (replaces car physics while airborne): straight line, parabola-ish height, bonk + drop if it meets a wall at street level
+function garFlyStep(c,dt){const f=c._fly;f.t+=dt;const u=Math.min(1,f.t/f.T);
+  const nx=c.x+f.vx*dt,ny=c.y+f.vy*dt,fx=nx+Math.cos(c.a)*c.L*.45,fy=ny+Math.sin(c.a)*c.L*.45;
+  const sol=(x,y)=>{if(garAt(x,y,0))return false;const tx=Math.floor(x/T),ty=Math.floor(y/T);WMODE=0;return solidAt(tx,ty);};// above the garage itself nothing is in the way
+  if(sol(nx,ny)||sol(fx,fy)){f.vx*=-.15;f.vy*=-.15;f.bonk=(f.bonk||0)+1;if(f.t<f.T*.7)f.t=f.T*.7;}else{c.x=nx;c.y=ny;}
+  c.vx=f.vx;c.vy=f.vy;c.lvl=0;c._rmp=null;c._gz=Math.max(0,f.z0*(1-u*u)+.06*Math.sin(Math.PI*u));c._air=Math.max(0,f.T-f.t);c._airT=f.T;
+  if(c===player.inCar){player.x=c.x;player.y=c.y;player.lvl=0;player._gz=c._gz;}
+  if(u>=1){c._fly=null;c._gz=0;c._air=0;c.vx*=.7;c.vy*=.7;shakeA=Math.max(shakeA,6);try{sfx('crash');}catch(e){}
+    try{damageCar(c,f.bonk?6:3,true);}catch(e){}
+    // never come down inside a wall: nudge out to the nearest open street tile
+    const solL=(x,y)=>{const tx=Math.floor(x/T),ty=Math.floor(y/T);WMODE=0;return solidAt(tx,ty)||!!garAt(x,y,0);};
+    if(solL(c.x,c.y)){let best=null,bd=1e9;for(let dy=-6;dy<=6;dy++)for(let dx=-6;dx<=6;dx++){const x=c.x+dx*T,y=c.y+dy*T;if(solL(x,y))continue;const d=dx*dx+dy*dy;if(d<bd){bd=d;best=[x,y];}}if(best){c.x=best[0];c.y=best[1];}}
+    const okLand=!c.wreck&&!garAt(c.x,c.y,0);GAR.stats.lastLand={x:c.x,y:c.y,ok:okLand,bonk:f.bonk||0};
+    if(f.pay&&okLand&&c===player.inCar){GAR.stats.jumps=(GAR.stats.jumps||0)+1;const n=GAR.stats.jumps,pay=n<=1?500:150;addMoney(pay);msg('ROOF JUMP!  +$'+pay,'#ffd23a',2.2);try{sfx('cash');}catch(e){}}
+    if(c===player.inCar){player.lvl=0;player._gz=0;}}}
 let _garMT=0;
 update=(o=>function(dt){const me=player.inCar||player;GAR.active=GAR.list.some(G=>Math.hypot(focus.x-G.cx,focus.y-G.cy)<1700);
-  if((me.lvl||me._gz)&&!garAt(me.x,me.y,2)){me.lvl=0;me._gz=0;player.lvl=0;player._gz=0;}
+  if((me.lvl||me._gz)&&!me._fly&&!garAt(me.x,me.y,2)){me.lvl=0;me._gz=0;player.lvl=0;player._gz=0;}
   o(dt);if(state==='play'&&!interior&&GAR.list.length){_garMT-=dt;if(_garMT<=0){_garMT=.5;try{garManage();}catch(e){console.error(e);}}try{garJump(dt);}catch(e){}}})(update);
 startGame=(o=>function(){player.lvl=0;player._gz=0;for(const G of GAR.list){for(const s of G.stalls){s.car=null;s.filled=false;}for(const s of G.pedSpots){s.ped=null;s.filled=false;}}return o.apply(this,arguments);})(startGame);
 // ---------------------------------------------------------------- drawing
@@ -5119,20 +5139,23 @@ function garFloor(G,k,dim){const H=G.H[k],gr=G.grid[k],hole=G.ramps.find(r=>r.lo
   for(let y=0;y<10;y++)for(let x=0;x<10;x++){if(!gr[y*10+x])continue;const X=G.x0+x*T,Y=G.y0+y*T;if(hole&&X>=hole.x0&&X<hole.x1&&Y>=hole.y0&&Y<hole.y1)continue;
     g.fillStyle='#5a5d63';g.fillRect(X,Y,T,T);g.fillStyle='#d8b030';for(let i=-T;i<T;i+=10){g.beginPath();g.moveTo(X+Math.max(0,i),Y+Math.max(0,-i));g.lineTo(X+Math.min(T,i+T),Y+Math.min(T,T-i));g.lineTo(X+Math.min(T,i+T+4),Y+Math.min(T,T-i-4));g.lineTo(X+Math.max(0,i+4),Y+Math.max(0,-i-4));g.closePath();g.fill();}
     g.strokeStyle='rgba(0,0,0,.35)';g.lineWidth=1;g.strokeRect(X+.5,Y+.5,T-1,T-1);}
-  if(top){g.fillStyle='rgba(255,255,255,.22)';g.font='bold 44px '+FONT;g.textAlign='center';g.textBaseline='middle';g.fillText('P',G.x0+6.9*T,G.y0+8.4*T);
-    const K=G.kick;g.fillStyle='#d8a018';g.fillRect(K.x-K.w/2,K.y-K.h/2,K.w,K.h);g.fillStyle='#2a2208';for(let i=0;i<3;i++){const x=K.x-K.w/2+6+i*13;g.beginPath();g.moveTo(x,K.y-9);g.lineTo(x+8,K.y);g.lineTo(x,K.y+9);g.lineTo(x+3,K.y);g.closePath();g.fill();}
-    g.strokeStyle='#fff3b0';g.lineWidth=1.5;g.strokeRect(K.x-K.w/2,K.y-K.h/2,K.w,K.h);}
+  if(top){g.fillStyle='rgba(255,255,255,.22)';g.font='bold 44px '+FONT;g.textAlign='center';g.textBaseline='middle';g.fillText('P',G.x0+7.4*T,G.y0+8.6*T);
+    const K=G.kick,RW=G.runway,dx=K.dx||0,dy=K.dy||0,chev=(cx,cy,sz,col)=>{g.fillStyle=col;g.beginPath();g.moveTo(cx+dx*sz,cy+dy*sz);g.lineTo(cx-dy*sz-dx*sz*.2,cy+dx*sz-dy*sz*.2);g.lineTo(cx-dx*sz*.15,cy-dy*sz*.15);g.lineTo(cx+dy*sz-dx*sz*.2,cy-dx*sz-dy*sz*.2);g.closePath();g.fill();};
+    if(RW){const mx=(RW.x0+RW.x1)/2;g.fillStyle='rgba(255,255,255,.55)';for(let y=RW.y1-14;y>RW.y0+40;y-=26)g.fillRect(mx-1.5,y-14,3,14);g.fillStyle='rgba(255,255,255,.35)';g.fillRect(RW.x0+1,RW.y0,2,RW.y1-RW.y0-6);g.fillRect(RW.x1-3,RW.y0,2,RW.y1-RW.y0-6);
+      for(let y=RW.y0+38;y>RW.y0;y-=16)chev(mx,y,8,'rgba(255,210,60,.6)');}
+    g.fillStyle='#d8a018';g.fillRect(K.x-K.w/2,K.y-K.h/2,K.w,K.h);for(let i=-2;i<=2;i++)chev(K.x+i*15*(dy?1:0),K.y+i*15*(dx?1:0),8,'#2a2208');
+    g.strokeStyle='#fff3b0';g.lineWidth=1.5;g.strokeRect(K.x-K.w/2,K.y-K.h/2,K.w,K.h);g.fillStyle='#fff3b0';g.font='bold 9px '+FONT;g.textAlign='center';g.textBaseline='middle';g.fillText('JUMP',K.x,K.y+K.h/2+7);}
   // parapet
   g.strokeStyle=top?'#c9ccd2':'#a6aab1';g.lineWidth=5;g.strokeRect(G.x0+2.5,G.y0+2.5,G.x1-G.x0-5,G.y1-G.y0-5);g.strokeStyle='rgba(0,0,0,.25)';g.lineWidth=1;g.strokeRect(G.x0+5.5,G.y0+5.5,G.x1-G.x0-11,G.y1-G.y0-11);}
 function garDraw(pb){const G=pb.garage,H=G.H,me=player.inCar||player,inside=garAt(me.x,me.y,6)===G&&player.active,pz=inside?(me._gz||0):-1;
-  const ents=[];for(const c of cars)if((c._gz||0)>.001&&inView(c.x,c.y,60)&&garAt(c.x,c.y,10)===G)ents.push(c);for(const p of peds)if((p._gz||0)>.001&&inView(p.x,p.y,30)&&garAt(p.x,p.y,10)===G)ents.push(p);
+  const ents=[];for(const c of cars)if(!c._fly&&(c._gz||0)>.001&&inView(c.x,c.y,60)&&garAt(c.x,c.y,10)===G)ents.push(c);for(const p of peds)if((p._gz||0)>.001&&inView(p.x,p.y,30)&&garAt(p.x,p.y,10)===G)ents.push(p);
   const pOn=player.active&&!player.inCar&&(player._gz||0)>.001&&garAt(player.x,player.y,10)===G;
   const R=typeof TKR==='function'?TKR():null,tk=typeof TK8!=='undefined'&&TK8.list?TK8.list.filter(k=>k.lvl&&garAt(k.x,k.y,0)===G&&!R.got[k.key]):[];
   let above=0;for(let k=1;k<=2;k++){const up=inside&&H[k]>pz+.004;if(up&&++above>1)break;const al=up?GAR.dim:1;g.globalAlpha=al;GAR.dimNow=up;
     garBand(G,H[k-1],H[k]);const r=G.ramps.find(r=>r.lo===k-1);if(r){g.globalAlpha=inside&&me._rmp===r?1:al;garRamp(G,r);g.globalAlpha=al;}garFloor(G,k,up);
     GAR.drawing=true;try{for(const e of ents){const z=e._gz;if(z>H[k-1]+.001&&z<=H[k]+.001){g.globalAlpha=(inside&&z>pz+.004)?GAR.dim:1;setWorld(z);if(e.L)drawCar(e);else drawPed(e);}}g.globalAlpha=1;
       if(pOn&&player._gz>H[k-1]+.001&&player._gz<=H[k]+.001){setWorld(player._gz);drawPed(player);g.strokeStyle='rgba(255,240,80,.6)';g.lineWidth=1;g.beginPath();g.arc(player.x,player.y,8,0,TAU);g.stroke();}
-      const pc=player.inCar;if(pc&&(pc._gz||0)>H[k-1]+.001&&pc._gz<=H[k]+.001&&garAt(pc.x,pc.y,10)===G){setWorld(pc._gz);g.strokeStyle='rgba(255,240,80,'+(.35+.25*Math.sin(gtime*6))+')';g.lineWidth=1;g.beginPath();g.arc(pc.x,pc.y,pc.L*.62,0,TAU);g.stroke();}
+      const pc=player.inCar;if(pc&&!pc._fly&&(pc._gz||0)>H[k-1]+.001&&pc._gz<=H[k]+.001&&garAt(pc.x,pc.y,10)===G){setWorld(pc._gz);g.strokeStyle='rgba(255,240,80,'+(.35+.25*Math.sin(gtime*6))+')';g.lineWidth=1;g.beginPath();g.arc(pc.x,pc.y,pc.L*.62,0,TAU);g.stroke();}
       if(k===2&&tk.length){setWorld(H[2]);for(const t of tk)if(inView(t.x,t.y,30))drawTok8(t);}}finally{GAR.drawing=false;}}
   g.globalAlpha=1;g.setTransform(1,0,0,1,0,0);}
 // minimap: a big readable P on the garage
@@ -5147,5 +5170,11 @@ drawHUD=(o=>function(){o();try{if(state!=='play'||interior||menu||phone.open||fa
   const t2=sub+'  \u2022  '+txt,w=ctx.measureText(t2).width+34*u,h=fs*1.6,x=W/2,y=H*(TOUCHUI?.21:.19);
   ctx.fillStyle='rgba(8,16,40,.78)';ctx.strokeStyle='#5aa0ff';ctx.lineWidth=2.5*u;ctx.beginPath();ctx.roundRect?ctx.roundRect(x-w/2,y-h/2,w,h,10*u):ctx.rect(x-w/2,y-h/2,w,h);ctx.fill();ctx.stroke();
   ctx.textAlign='center';ctx.textBaseline='middle';outline(t2,x,y+1*u,'#ffffff',4*u);ctx.restore();}catch(e){}})(drawHUD);
+
+// v6j: cars in the air are drawn after the buildings (they are above the roof line), shadow on the ground
+drawWorldOverlays=(o=>function(){o();if(interior)return;try{for(const c of cars){if(!c._fly||!inView(c.x,c.y,80))continue;setWorld(0);const u=Math.min(1,c._fly.t/c._fly.T),d=(1-u)*14+4;
+    g.fillStyle='rgba(0,0,0,'+(.18+.2*u)+')';g.beginPath();g.ellipse(c.x+d*.4,c.y+d*.4,c.L*.5,c.W*.55,c.a,0,TAU);g.fill();
+    setWorld(c._gz||0);GAR.drawing=true;try{drawCar(c);}finally{GAR.drawing=false;}
+    if(c===player.inCar){g.strokeStyle='rgba(255,240,80,.5)';g.lineWidth=1;g.beginPath();g.arc(c.x,c.y,c.L*.62,0,TAU);g.stroke();}}setWorld(0);}catch(e){GAR.drawing=false;}})(drawWorldOverlays);
 
 </script></body></html>
