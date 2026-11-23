@@ -343,8 +343,8 @@ function manage(){manageExtras();const vr=Math.hypot(LW,LH)/2/S,r0=vr+30,r1=r0+3
   for(const p of peds){if(p.dead)ndead++;else if(!p.cop&&p.gar==null)np++;}
   for(const c of cars){if(c.driver==='ai'||(c.driver==='cop'&&c.ai.mode==='traffic'))nc++;else if(!c.driver&&!c.wreck&&c.gar==null)npark++;if(c.ai&&c.ai.mode==='chase')nchase++;}
   for(const k of pickups)if(k.type!=='cash')npk++;
-  for(let i=0;i<5&&np<PEDS;i++,np++)spawnPed(r0,r0+220);
-  if(nc<TRAFFIC)spawnTraffic(r0,r1+150,R()<.12);
+  for(let i=0;i<5&&np<PEDS*dnPedMul();i++,np++)spawnPed(r0,r0+220);
+  if(nc<TRAFFIC*dnCarMul())spawnTraffic(r0,r1+150,R()<.12);
   if(npark<PARKED)spawnParked(r0,r1+400);
   if(npk<7)spawnPickup(r0,r1+500);
   if(ndead>30){const i=peds.findIndex(p=>p.dead);if(i>=0)peds.splice(i,1);}
@@ -477,6 +477,7 @@ function renderWorld(){
   for(const p of parts)if(p.hi&&inView(p.x,p.y,20)){g.globalAlpha=clamp(p.life/p.max,0,1)*.9;g.fillStyle=p.col;g.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);}g.globalAlpha=1;
   for(const e of explosions){const k=e.t/.6;g.globalAlpha=1-k;g.fillStyle='#fff2a0';g.beginPath();g.arc(e.x,e.y,20+k*50,0,TAU);g.fill();g.fillStyle='#ff9020';g.beginPath();g.arc(e.x,e.y,12+k*34,0,TAU);g.fill();}g.globalAlpha=1;
   g.setTransform(1,0,0,1,0,0);
+  dnLight();
   if(state!=='title'){const vg=g.createRadialGradient(LW/2,LH/2,LH*.35,LW/2,LH/2,LH*.95);vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,.35)');g.fillStyle=vg;g.fillRect(0,0,LW,LH);}
   if(player.hurtT>0){g.fillStyle='rgba(255,0,0,'+player.hurtT*.6+')';g.fillRect(0,0,LW,LH);}
   if(flashT>0){g.fillStyle='rgba(255,240,200,'+flashT*3+')';g.fillRect(0,0,LW,LH);}
@@ -1214,7 +1215,7 @@ function drawPhone(){const G=phoneGeom(),u=G.u,pw=G.pw,ph=G.ph,px=G.px,py=G.py,D
   const top=G.big?30*u:40*u,bot=G.big?26*u:40*u;
   const sx=px+14*u,sy=py+top,sw=pw-28*u,sh=ph-top-bot;const gr=ctx.createLinearGradient(0,sy,0,sy+sh);gr.addColorStop(0,'#1b2a4a');gr.addColorStop(1,'#0b0f1e');ctx.fillStyle=gr;ctx.fillRect(sx,sy,sw,sh);
   ctx.fillStyle='#000';uiRRect(ctx,px+pw/2-40*u,py+(top-14*u)/2,80*u,14*u,7*u);ctx.fill();ctx.fillStyle='#333';uiRRect(ctx,px+pw/2-30*u,py+ph-bot/2-4*u,60*u,8*u,4*u);ctx.fill();
-  const d=new Date();ctx.font='bold '+Math.round(12*u)+'px '+FONT;ctx.textAlign='left';ctx.fillStyle='#fff';ctx.fillText(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),sx+8*u,sy+6*u);
+  const d=dnDate();ctx.font='bold '+Math.round(12*u)+'px '+FONT;ctx.textAlign='left';ctx.fillStyle='#fff';ctx.fillText(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),sx+8*u,sy+6*u);
   ctx.textAlign='right';ctx.fillText(state==='play'?'\u23f8 PAUSED   PTA-NET \u25ae\u25ae\u25ae':'PTA-NET \u25ae\u25ae\u25ae',sx+sw-8*u,sy+6*u);
   const minT=G.big?44*D:0,hdrH=Math.max(32*u,minT);
   if(phone.app==='home'){ctx.textAlign='center';ctx.font='bold '+Math.round(20*u)+'px '+FONT;outline('PTA PHONE',px+pw/2,sy+30*u,'#ffd23a',3*u);
@@ -2798,9 +2799,9 @@ function notify(text,cat,pri,opt){const N=noteInit();opt=opt||{};text=String(tex
   // coalesce repeats (same text, or money/XP within a short window) instead of spamming
   let it=N.q.find(i=>i.key===key)||(N.cur&&!N.cur.done&&N.cur.key===key?N.cur:null);
   if(!it){const h=N.hist[0];if(h&&h.key===key&&now-h.t0<(opt.sum!=null?4:8))it=h;}
-  if(it&&now-it.t0<(opt.sum!=null?4:8)){it.n++;if(opt.sum!=null)it.sum+=opt.sum;it.text=noteFmt(it);it.t0=now;it.date=new Date();
+  if(it&&now-it.t0<(opt.sum!=null?4:8)){it.n++;if(opt.sum!=null)it.sum+=opt.sum;it.text=noteFmt(it);it.t0=now;it.date=dnDate();
     if(N.cur!==it&&!N.q.includes(it)){it.done=false;it.ph=null;N.q.push(it);}if(it.pri>=1)N.unread++;return it;}
-  it={id:++N.seq,key,text0:text,cat,pri,n:1,sum:opt.sum!=null?opt.sum:null,t0:now,date:new Date()};it.text=noteFmt(it);
+  it={id:++N.seq,key,text0:text,cat,pri,n:1,sum:opt.sum!=null?opt.sum:null,t0:now,date:dnDate()};it.text=noteFmt(it);
   N.hist.unshift(it);if(N.hist.length>50)N.hist.length=50;if(pri>=1)N.unread++;
   if(pri>=2){let i=0;while(i<N.q.length&&N.q[i].pri>=2)i++;N.q.splice(i,0,it);}else N.q.push(it);
   while(N.q.length>8){const j=N.q.findIndex(x=>x.pri<1);N.q.splice(j>=0?j:N.q.length-1,1);}
@@ -2845,7 +2846,7 @@ function drawHubBack(HL){const h=HL.hub;if(!h)return;const u=U;ctx.save();
 function drawHubFront(HL){const h=HL.hub;if(!h)return;const N=noteInit(),u=U;ctx.save();ctx.textBaseline='middle';
   // status bar: clock, signal, unread badge
   const sx=h.x+h.bz,sy=h.y+h.bz,sw=h.w-2*h.bz,sh=h.sb,fs=Math.round(sh*.78);ctx.fillStyle='#000';ctx.fillRect(sx,sy,sw,sh);
-  const d=new Date();ctx.font='bold '+fs+'px '+FONT;ctx.textAlign='left';ctx.fillStyle='#fff';const clk=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');ctx.fillText(clk,sx+sh*.3,sy+sh/2+1);const clkEnd=sx+sh*.3+ctx.measureText(clk).width+sh*.3;
+  const d=dnDate();ctx.font='bold '+fs+'px '+FONT;ctx.textAlign='left';ctx.fillStyle='#fff';const clk=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');ctx.fillText(clk,sx+sh*.3,sy+sh/2+1);const clkEnd=sx+sh*.3+ctx.measureText(clk).width+sh*.3;
   let rx=sx+sw-sh*.3;const bw=Math.max(2,sh*.16);for(let i=3;i>=0;i--){const bh=sh*(.3+.15*i);ctx.fillStyle=i<3||stars===0?'#e8e8e8':'#777';ctx.fillRect(rx-bw,sy+sh*.85-bh,bw,bh);rx-=bw*1.6;}
   rx-=sh*.25;ctx.textAlign='right';ctx.fillStyle='#bbb';ctx.font='bold '+Math.round(fs*.85)+'px '+FONT;{const pw=ctx.measureText('PTA').width,bt=N.unread>0?ctx.measureText('\u2709 '+Math.min(99,N.unread)).width+sh:0;if(rx-pw-sh*.5-bt>clkEnd){ctx.fillText('PTA',rx,sy+sh/2+1);rx-=pw+sh*.5;}}
   if(N.unread>0){const t=String(Math.min(99,N.unread)),r=sh*.48;ctx.font='bold '+fs+'px '+FONT;let lab='\u2709 '+t,tw=Math.max(r*2,ctx.measureText(lab).width+r);if(rx-tw<clkEnd){lab=t;tw=Math.max(r*2,ctx.measureText(lab).width+r);}
@@ -4120,7 +4121,7 @@ function v6Schools(dt){for(const s of SCH6){const nx=s.x+Math.cos(s.a)*14*dt,ny=
 function v6SchoolNear(x,y,r){let b=null,bd=r||110;for(const s of SCH6){const d=Math.hypot(s.x-x,s.y-y);if(d<bd){bd=d;b=s;}}return b;}
 function v6FinderOn(){const c=player.inCar;return!!(c&&c.boat&&PK('finder')&&!interior);}
 // ---------------------------------------------------------------- availability
-function v6Hour(){return V6.hour!=null?V6.hour:new Date().getHours();}
+function v6Hour(){return V6.hour!=null?V6.hour:Math.floor(DN.min/60)%24;}
 function v6Tod(){const h=v6Hour();return(h>=5&&h<8)||(h>=17&&h<20)?'dd':(h>=21||h<5)?'night':'day';}
 function v6Offshore(x,y){return(x/T>=206||y/T>=181)&&openWater5(x,y,3*T);}
 function v6BoatZone(c){return v6Offshore(c.x,c.y)||(c.type==='fishing'&&openWater5(c.x,c.y,4.5*T))?'deep':'boat';}
@@ -4509,7 +4510,7 @@ function r7GangPed(q,dt,R,tg){const v=R.g[q.gang],d=Math.hypot(q.x-tg.x,q.y-tg.y
   else if(q.r7host&&!war&&!mad){q.hostile=false;q.r7host=false;q.state='wander';}
   else if(!q.hostile&&v>=20&&d<110&&gtime>(q.r7w||0)){q.r7w=gtime+16;r7Bubble(q,'yo');}}
 // spawn gang members on their turf (groups of 2-3)
-spawnPed=(o=>function(r0,r1){o(r0,r1);if(state!=='play')return;const gg=turf7(focus.x,focus.y);if(!gg||r7()>.3)return;let n=0;for(const q of peds)if(q.gang&&!q.dead&&Math.hypot(q.x-focus.x,q.y-focus.y)<900)n++;if(n>=7)return;
+spawnPed=(o=>function(r0,r1){o(r0,r1);if(state!=='play')return;const gg=turf7(focus.x,focus.y);const gm=dnGangMul();if(!gg||r7()>.3*gm)return;let n=0;for(const q of peds)if(q.gang&&!q.dead&&Math.hypot(q.x-focus.x,q.y-focus.y)<900)n++;if(n>=Math.round(7*gm))return;
   const s=ringTile(r0,r1,t=>t===SIDE||t===SAND);if(!s||turf7(s.x,s.y)!==gg)return;const k=2+(r7()<.4?1:0);for(let i=0;i<k;i++)r7GangMember(gg,s.x+r7r(-14,14),s.y+r7r(-14,14));})(spawnPed);
 function r7GangMember(gg,x,y){const q=makePed(x,y,false);q.kind='thug';q.gang=gg.id;q.hp=45;q.gun=r7()<.55;q.brave=true;
   q.outfit={top:{t:r7()<.5?'tee':'jacket',c:gg.col},pants:{t:'jeans',c:'#1c1c26'},shoes:{t:'sneakers',c:'#111'},hat:{t:'cap',c:gg.col2},glasses:r7()<.5?{t:'shades',c:'#111'}:null,hair:{t:'buzz',c:'#111'}};
@@ -5176,5 +5177,188 @@ drawWorldOverlays=(o=>function(){o();if(interior)return;try{for(const c of cars)
     g.fillStyle='rgba(0,0,0,'+(.18+.2*u)+')';g.beginPath();g.ellipse(c.x+d*.4,c.y+d*.4,c.L*.5,c.W*.55,c.a,0,TAU);g.fill();
     setWorld(c._gz||0);GAR.drawing=true;try{drawCar(c);}finally{GAR.drawing=false;}
     if(c===player.inCar){g.strokeStyle='rgba(255,240,80,.5)';g.lineWidth=1;g.beginPath();g.arc(c.x,c.y,c.L*.62,0,TAU);g.stroke();}}setWorld(0);}catch(e){GAR.drawing=false;}})(drawWorldOverlays);
+
+// ======================================================================= v6d: day / night cycle
+//  One game clock drives everything (phone clock, ticker clock, fishing time-of-day, lighting, crowds).
+//  Lighting: a reduced-res lightmap canvas filled with the night tint, lights punched out with cached
+//  sprites (destination-out), drawn over the world buffer, then an additive ('lighter') pass for coloured
+//  glows. Dawn / dusk get a warm multiply grade. HUD is drawn later on the main canvas, so it is untouched.
+const DN_DAY_REAL_MIN=28;            // real minutes for one full 24h game day
+const DN_START_MIN=10*60;            // new games start at 10:00
+const DN_LM_SCALE=.5;                // lightmap resolution vs the world buffer
+const DN_BRIGHT_DEF=7;               // Phone > SYSTEM "Night brightness" default (1..10)
+const DN={min:DN_START_MIN,day:1,phase:'day',cbs:[],force:null,bright:DN_BRIGHT_DEF,dark:0,warm:0,
+  flashes:[],wins:[],lamps:null,spr:{},lm:null,lx:null,stats:{ms:0,n:0,frames:0,last:0},on:true};
+try{const b=parseInt(localStorage.getItem('pta_nightbright'),10);if(b>=1&&b<=10)DN.bright=b;}catch(e){}
+const dnSmooth=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);};
+function dnRate(){return 1440/(DN_DAY_REAL_MIN*60);}          // game minutes per real second
+function dnHourF(m){return ((m==null?DN.min:m)%1440)/60;}
+function dnPhaseAt(m){const h=dnHourF(m);return h>=5&&h<7?'dawn':h>=7&&h<18.5?'day':h>=18.5&&h<20.5?'dusk':'night';}
+function dnDarkAt(m){const h=dnHourF(m);return h<4.6?1:h<7?1-dnSmooth(4.6,7,h):h<18?0:h<21?dnSmooth(18,21,h):1;}
+function dnWarmAt(m){const h=dnHourF(m),b=(c,w)=>Math.max(0,1-Math.abs(h-c)/w);return Math.min(1,Math.max(b(6.1,1.35),b(19.3,1.6)));}
+function dnIsDawn(m){return dnHourF(m)<12;}
+function dnDate(){const m=Math.floor(DN.min)%1440;return{h:Math.floor(m/60),m:m%60,getHours(){return this.h;},getMinutes(){return this.m;}};}
+function dnClockStr(m){const t=Math.floor(m==null?DN.min:m)%1440;return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');}
+function dnPedMul(){return 1-.45*DN.dark;}
+function dnCarMul(){return 1-.3*DN.dark;}
+function dnGangMul(){return 1+.6*DN.dark;}
+function dnRefresh(){DN.dark=dnDarkAt();DN.warm=dnWarmAt();const p=dnPhaseAt();if(p!==DN.phase){const prev=DN.phase;DN.phase=p;for(const cb of DN.cbs.slice()){try{cb(p,prev);}catch(e){}}}}
+function dnSetMin(m,keepDay){const old=DN.min;m=((m%1440)+1440)%1440;if(!keepDay&&m<old)DN.day++;DN.min=m;dnRefresh();}
+function dnTick(dt){if(state!=='play'||phone.open||fade)return;DN.min+=dt*dnRate();if(DN.min>=1440){DN.min-=1440;DN.day++;}dnRefresh();
+  for(const f of DN.flashes)f.t-=dt;if(DN.flashes.length&&DN.flashes[0].t<=0)DN.flashes=DN.flashes.filter(f=>f.t>0);
+  if(DN.dark>.05)for(const b of bullets)if(!b._dn){b._dn=1;if(DN.flashes.length<24)DN.flashes.push({x:b.x,y:b.y,t:.08});}}
+update=(o=>function(dt){o(dt);dnTick(dt);})(update);
+// ---- wait / sleep until a time
+function dnWaitUntil(h,why){
+  if(stars>0){DN.lastDeny='WANTED';msg('CAN\'T REST WHILE WANTED - LOSE THE COPS FIRST','#ff6a5a',2.6);sfx&&sfx('deny');return false;}
+  if(fade||state!=='play')return false;
+  const tgt=h*60;phone.open=false;
+  startFade(h<12?'WAITING UNTIL MORNING...':'WAITING UNTIL NIGHT...',()=>{let m=DN.min;if(m>=tgt)DN.day++;DN.min=tgt;dnRefresh();
+    player.hp=Math.max(player.hp,Math.min(hpMax?hpMax():100,player.hp+40));if(why==='home'){try{saveGame();}catch(e){}}
+    msg('DAY '+DN.day+'  '+dnClockStr()+(why==='home'?'  -  GAME SAVED':''),'#ffd23a',2.4);},.7);
+  return true;}
+// ---- saves carry the clock
+saveGame=(o=>function(){o();try{const s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');if(s){s.tod=Math.round(DN.min*10)/10;s.tday=DN.day;localStorage.setItem(SAVE_KEY,JSON.stringify(s));}}catch(e){}})(saveGame);
+loadGame=(o=>function(){const r=o();if(r){try{const s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');if(s&&s.tod!=null){DN.min=clamp(+s.tod||0,0,1439.9);DN.day=s.tday|0||1;}}catch(e){}}dnRefresh();return r;})(loadGame);
+startGame=(o=>function(fresh){DN.min=DN_START_MIN;DN.day=1;DN.flashes=[];dnRefresh();return o(fresh);})(startGame);
+// ---- safehouse: wait spots next to the bed
+buildRoom3=(o=>function(q){const r=o(q);if(r&&r.type==='apt'){
+  r.spots.push({x:44,y:172,r:20,key:'E',label:'Wait until morning (6:00)',act:()=>dnWaitUntil(6,'home')});
+  r.spots.push({x:112,y:172,r:20,key:'E',label:'Wait until night (21:00)',act:()=>dnWaitUntil(21,'home')});}return r;})(buildRoom3);
+// ---- phone: CLOCK app + Night brightness in SYSTEM
+{const si=APPS.findIndex(a=>a.id==='system');APPS.splice(si<0?APPS.length:si,0,{id:'clock',name:'CLOCK',col:'#6a5ad8',g:'\u25d0'});}
+function dnSetBright(b){DN.bright=clamp(b|0,1,10);try{localStorage.setItem('pta_nightbright',String(DN.bright));}catch(e){}}
+function dnBrightItem(){return{label:'Night brightness',sub:(DN.bright>=9?'Very bright nights':DN.bright>=6?'Bright nights':DN.bright>=4?'Moody':'Dark')+(DN.bright===DN_BRIGHT_DEF?' (default)':''),right:String(DN.bright),
+  adj:d=>dnSetBright(DN.bright+d),act:()=>dnSetBright(DN.bright>=10?1:DN.bright+1)};}
+const DN_PH_NAME={dawn:'DAWN',day:'DAY',dusk:'DUSK',night:'NIGHT'};
+phoneView=(o=>function(){const a=phone.app;
+  if(a==='clock'){const v={title:'CLOCK',lines:[],items:[],foot:[]};
+    v.lines.push('DAY '+DN.day+'   '+dnClockStr()+'   '+DN_PH_NAME[DN.phase]);
+    v.items.push({label:'Wait until morning (6:00)',sub:stars>0?'Not while wanted':'',act:()=>dnWaitUntil(6,'phone')});
+    v.items.push({label:'Wait until night (21:00)',sub:stars>0?'Not while wanted':'',act:()=>dnWaitUntil(21,'phone')});
+    v.items.push(dnBrightItem());
+    v.foot.push('A full day lasts '+DN_DAY_REAL_MIN+' real minutes.');v.foot.push('Sleep at your apartment to wait and save.');return v;}
+  const v=o();if(a==='system'){let i=v.items.findIndex(it=>/^Controls/.test(it.label));if(i<0)i=v.items.findIndex(it=>/^Display/.test(it.label));v.items.splice(i<0?v.items.length:i+1,0,dnBrightItem());}return v;})(phoneView);
+// ---- windows: lit at night (wraps the building wall painter; same grid + hash as the daytime windows)
+const DN_WIN_COL=['#ffd98a','#ffcf70','#ffe6a8','#fff2d6','#9fc4ff'];
+wall=(o=>function(p0,p1,q0,q1,col,bd,len,side){o(p0,p1,q0,q1,col,bd,len,side);if(DN.dark<.08||!DN.on||!bd||!bd.floors)return;
+  const dep=Math.abs(q0[0]-p0[0])+Math.abs(q0[1]-p0[1])+Math.abs(q1[0]-p1[0])+Math.abs(q1[1]-p1[1]);if(dep<6)return;
+  const h=dnHourF(),late=h>=0&&h<5?(h<2?.65:.35):1,thr=.82-.36*late*dnSmooth(.08,.5,DN.dark);
+  const F=bd.floors,C=Math.max(1,Math.floor(len/22));
+  const pt=(u,t)=>{const bx=p0[0]+(p1[0]-p0[0])*u,by=p0[1]+(p1[1]-p0[1])*u,tx=q0[0]+(q1[0]-q0[0])*u,ty=q0[1]+(q1[1]-q0[1])*u;return[bx+(tx-bx)*t,by+(ty-by)*t];};
+  for(let f=0;f<F;f++){const t0=(f+.3)/F,t1=(f+.75)/F;for(let c=0;c<C;c++){const hv=hash2(bd.seed+c*13+side*101,f*7+bd.seed);if(hv<=thr)continue;
+    const u0=(c+.22)/C,u1=(c+.78)/C,a=pt(u0,t0),b2=pt(u1,t0),c2=pt(u1,t1),d=pt(u0,t1);
+    const k=Math.floor(hash2(bd.seed+c*31,f*17+side)*997)%DN_WIN_COL.length,cl=DN_WIN_COL[k];
+    if(hv<=.82){g.fillStyle=cl;g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(b2[0],b2[1]);g.lineTo(c2[0],c2[1]);g.lineTo(d[0],d[1]);g.closePath();g.fill();}
+    if(DN.wins.length<500){const cx=(a[0]+b2[0]+c2[0]+d[0])/4,cy=(a[1]+b2[1]+c2[1]+d[1])/4,sz=Math.max(Math.abs(b2[0]-a[0])+Math.abs(b2[1]-a[1]),Math.abs(d[0]-a[0])+Math.abs(d[1]-a[1]));
+      DN.wins.push([cx,cy,sz,cl,k===4]);}}}})(wall);
+// ---- sprites
+function dnRGB(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);return[n>>16&255,n>>8&255,n&255];}
+function dnGlowSpr(col){const key='g'+col;if(DN.spr[key])return DN.spr[key];const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d'),[r,gg,b]=dnRGB(col);
+  const gr=x.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,`rgba(${r},${gg},${b},1)`);gr.addColorStop(.25,`rgba(${r},${gg},${b},.8)`);gr.addColorStop(.6,`rgba(${r},${gg},${b},.28)`);gr.addColorStop(1,`rgba(${r},${gg},${b},0)`);
+  x.fillStyle=gr;x.fillRect(0,0,64,64);return DN.spr[key]=c;}
+function dnConeSpr(col){const key='c'+col;if(DN.spr[key])return DN.spr[key];const c=document.createElement('canvas');c.width=128;c.height=96;const x=c.getContext('2d'),[r,gg,b]=dnRGB(col);
+  const gr=x.createRadialGradient(4,48,0,4,48,124);gr.addColorStop(0,`rgba(${r},${gg},${b},1)`);gr.addColorStop(.45,`rgba(${r},${gg},${b},.7)`);gr.addColorStop(1,`rgba(${r},${gg},${b},0)`);
+  try{x.filter='blur(5px)';}catch(e){}x.fillStyle=gr;x.beginPath();x.moveTo(4,44);x.lineTo(124,6);x.lineTo(124,90);x.lineTo(4,52);x.closePath();x.fill();
+  try{x.filter='none';}catch(e){}const g2=x.createRadialGradient(6,48,0,6,48,22);g2.addColorStop(0,`rgba(${r},${gg},${b},.9)`);g2.addColorStop(1,`rgba(${r},${gg},${b},0)`);x.fillStyle=g2;x.fillRect(0,26,30,44);
+  return DN.spr[key]=c;}
+// ---- streetlights: sidewalk tiles beside a road, every 4th tile along the curb, bucketed in 12x12 tile cells
+function dnBuildLamps(){const B=new Map();let n=0;const nb=[[0,-1],[1,0],[0,1],[-1,0]];
+  for(let ty=1;ty<N-1;ty++)for(let tx=1;tx<N-1;tx++){if(map[ty*N+tx]!==SIDE)continue;
+    for(const [dx,dy] of nb){if(map[(ty+dy)*N+tx+dx]!==ROAD)continue;const along=dx?ty:tx;if(((along+(dx?tx:ty)*3)%6)!==0)continue;
+      const x=(tx+.5+dx*.32)*T,y=(ty+.5+dy*.32)*T,k=((tx/12)|0)*1000+((ty/12)|0);if(!B.has(k))B.set(k,[]);B.get(k).push([x,y]);n++;break;}}
+  DN.lamps=B;DN.stats.lamps=n;}
+const DN_NEON_COL=['#ff4fd8','#3ff0ff','#b86bff','#5dffb0','#ff7a3a','#ffe14a'];
+const DN_NEON_D=new Set(['SOUTH BEACH','OCEAN DRIVE']);
+function dnNeonOf(bd){if(bd._neon!==undefined)return bd._neon;let n=null;if(!bd.garage&&bd.h){const cx=(bd.x0+bd.x1)/2,cy=(bd.y0+bd.y1)/2,ds=DISTRICTS[districtAt(cx,cy)],nm=ds&&ds.name;
+    const sd=(bd.seed|0)+Math.round(cx*3+cy*7),hv=hash2(sd,913);if((nm&&DN_NEON_D.has(nm)&&hv<.85)||(bd.poi&&/club|bar/.test(bd.poi.type||'')))n=DN_NEON_COL[Math.floor(hash2(sd,377)*997)%DN_NEON_COL.length];}
+  return bd._neon=n;}
+// ---- the lighting pass (called in the world render just before the vignette, transform = identity)
+function dnLight(){DN.stats.frames++;const wins=DN.wins;DN.wins=[];if(!DN.on||state==='title'||interior)return;
+  const d=DN.dark,w=DN.warm;if(d<.01&&w<.01)return;const t0=performance.now();
+  if(w>.01){const dawn=dnIsDawn(),tc=dawn?[255,178,160]:[255,160,96],k=w*(dawn?.45:.5);g.globalCompositeOperation='multiply';
+    g.fillStyle=`rgb(${Math.round(255+(tc[0]-255)*k)},${Math.round(255+(tc[1]-255)*k)},${Math.round(255+(tc[2]-255)*k)})`;g.fillRect(0,0,LW,LH);
+    g.globalCompositeOperation='lighter';g.fillStyle=dawn?`rgba(255,120,150,${.05*w})`:`rgba(255,110,40,${.06*w})`;g.fillRect(0,0,LW,LH);g.globalCompositeOperation='source-over';}
+  if(d<.02){DN.stats.ms=DN.stats.ms*.9+(performance.now()-t0)*.1;return;}
+  if(!DN.lm){DN.lm=document.createElement('canvas');DN.lx=DN.lm.getContext('2d');}
+  const q=DN_LM_SCALE,LWq=Math.ceil(LW*q),LHq=Math.ceil(LH*q);if(DN.lm.width!==LWq||DN.lm.height!==LHq){DN.lm.width=LWq;DN.lm.height=LHq;}
+  const L=DN.lx,A=d*(.97-.042*DN.bright),wk=w*(1-d*.5);
+  const nc=[Math.round(8+40*wk),Math.round(14+8*wk),Math.round(40+6*wk)];
+  L.globalCompositeOperation='source-over';L.setTransform(1,0,0,1,0,0);L.clearRect(0,0,LWq,LHq);L.fillStyle=`rgba(${nc[0]},${nc[1]},${nc[2]},${A.toFixed(3)})`;L.fillRect(0,0,LWq,LHq);
+  const PG=[],PH=[],AG=[],AH=[];let P=PG,G2=AG;const hi=v=>{P=v?PH:PG;G2=v?AH:AG;};// P: punch (glow or cone), G2: additive; ground lists get masked by roofs
+  const on=dnSmooth(.15,.45,d),sc=S,vm=200;
+  const glow=(x,y,r,a,col,ca)=>{P.push([0,x,y,r,a]);if(col&&ca>0)G2.push([0,x,y,r,col,ca]);};
+  // player's own soft light (keeps the hero readable)
+  {const tg=player.inCar||player;if(player.active){const p=Pj(tg.x,tg.y,0);glow(p[0],p[1],70*sc,.55,null,0);}}
+  // streetlights
+  if(on>0){if(!DN.lamps)dnBuildLamps();const c0=Math.floor((vx0-vm)/T/12),c1=Math.floor((vx1+vm)/T/12),r0=Math.floor((vy0-vm)/T/12),r1=Math.floor((vy1+vm)/T/12);
+    for(let cy=r0;cy<=r1;cy++)for(let cx=c0;cx<=c1;cx++){const arr=DN.lamps.get(cx*1000+cy);if(!arr)continue;for(const [x,y] of arr){if(x<vx0-90||x>vx1+90||y<vy0-90||y>vy1+90)continue;
+      const p=Pj(x,y,0);glow(p[0],p[1],72*sc,.92*on,'#ffa040',.24*on);G2.push([0,p[0],p[1],5*sc,'#fff0c0',.85*on]);}}}
+  // cars: headlights, tail lights, police bars, burning wrecks
+  const fl=Math.floor(gtime*7)%2;
+  for(const c of cars){if(c.x<vx0-200||c.x>vx1+200||c.y<vy0-200||c.y>vy1+200)continue;if(c._fly)continue;
+    if(c.wreck){if(c.fire>0||c.smokeT>0){const p=Pj(c.x,c.y,0),f=.8+.2*Math.sin(gtime*20+c.id);glow(p[0],p[1],60*sc*f,.7,'#ff7020',.45*f);}continue;}
+    const driven=!!c.driver||player.inCar===c;if(!driven)continue;
+    const ca=Math.cos(c.a),sa=Math.sin(c.a),hl=c.L/2,hw=c.W/2;
+    if(on>0){const fx=c.x+ca*hl,fy=c.y+sa*hl,p=Pj(fx,fy,0),len=(c.boat?120:195)*sc,wid=(c.boat?80:115)*sc;
+      P.push([1,p[0],p[1],len,wid,c.a,.95*on]);G2.push([1,p[0],p[1],len,wid,c.a,'#fff0c8',.24*on]);
+      for(const s of [-1,1]){const hx=fx+(-sa)*hw*.6*s,hy=fy+ca*hw*.6*s,hp=Pj(hx,hy,0);G2.push([0,hp[0],hp[1],5*sc,'#fffbe8',.9*on]);}
+      for(const s of [-1,1]){const tx=c.x-ca*hl+(-sa)*hw*.65*s,ty=c.y-sa*hl+ca*hw*.65*s,tp=Pj(tx,ty,0),br=c.braking?1:.55;G2.push([0,tp[0],tp[1],(c.braking?11:7)*sc,'#ff2020',br*on]);}}
+    if(c.type==='police'&&c.driver==='cop'&&(stars>0||(c.ai&&c.ai.mode==='chase'))){const p=Pj(c.x,c.y,.06);
+      glow(p[0]-(-sa)*0,p[1],95*sc,.55,fl?'#ff2a2a':'#2a5aff',.55);G2.push([0,p[0],p[1],22*sc,fl?'#ff6060':'#6a8aff',.9]);}}
+  // garage lights (roof lamps + ground-floor glow)
+  if(typeof GAR!=='undefined'&&on>0)for(const Gg of GAR.list){if(Gg.x1<vx0-100||Gg.x0>vx1+100||Gg.y1<vy0-100||Gg.y0>vy1+100)continue;const hR=Gg.H[2]+.04;hi(1);
+    for(const [u,v] of [[.12,.12],[.88,.12],[.12,.88],[.88,.88],[.5,.5]]){const p=Pj(Gg.x0+(Gg.x1-Gg.x0)*u,Gg.y0+(Gg.y1-Gg.y0)*v,hR);glow(p[0],p[1],70*sc,.7*on,'#ffe0a0',.18*on);G2.push([0,p[0],p[1],6*sc,'#fff4d0',.9*on]);}hi(0);
+    for(const [u,v] of [[.25,.5],[.75,.5],[.5,.2],[.5,.8]]){const p=Pj(Gg.x0+(Gg.x1-Gg.x0)*u,Gg.y0+(Gg.y1-Gg.y0)*v,0);glow(p[0],p[1],60*sc,.45*on,'#bfe0ff',.08*on);}}
+  hi(1);// lit roof signs on shops / businesses
+  if(on>0)for(const bd of buildings){if(!bd.poi||bd.poi.type==='house'||bd.x1<vx0-60||bd.x0>vx1+60||bd.y1<vy0-60||bd.y0>vy1+60)continue;const w2=Math.min(bd.x1-bd.x0-14,110),cx=(bd.x0+bd.x1)/2,cy=(bd.y0+bd.y1)/2,a=Pj(cx-w2/2,cy-12,bd.h),b=Pj(cx+w2/2,cy+12,bd.h);
+    P.push([2,a[0],a[1],b[0]-a[0],b[1]-a[1],.9*on]);P.push([0,(a[0]+b[0])/2,(a[1]+b[1])/2,(b[0]-a[0])*.5,.18*on]);let pc='#ffd890';try{pc=poiCol(bd.poi)||pc;}catch(e){}if(/^#[0-9a-f]{3,6}$/i.test(pc))G2.push([0,(a[0]+b[0])/2,(a[1]+b[1])/2,(b[0]-a[0])*.7,pc,.16*on]);}
+  // neon (South Beach / Ocean Drive + clubs and bars)
+  if(on>0)for(const bd of buildings){if(bd.x1<vx0-60||bd.x0>vx1+60||bd.y1<vy0-60||bd.y0>vy1+60)continue;const col=dnNeonOf(bd);if(!col)continue;
+    const fk=hash2(bd.seed|0,Math.floor(gtime*3))<.015?.35:1,a=Pj(bd.x0+3,bd.y0+3,bd.h),b=Pj(bd.x1-3,bd.y1-3,bd.h),ii=on*fk;
+    G2.push([2,a[0],a[1],b[0],b[1],col,.95*ii]);
+    const cxs=[a[0],(a[0]+b[0])/2,b[0]],cys=[a[1],(a[1]+b[1])/2,b[1]];
+    for(const x of cxs)for(const y of [a[1],b[1]])glow(x,y,30*sc,.18*ii,col,.32*ii);for(const y of cys.slice(1,2))for(const x of [a[0],b[0]])glow(x,y,30*sc,.18*ii,col,.32*ii);}
+  // lit windows (collected while the walls were painted this frame)
+  if(on>0)for(const [x,y,sz,col,tv] of wins){const f=tv?.75+.25*Math.sin(gtime*9+x):1;G2.push([0,x,y,Math.min(sz*.9,14*sc),col,.22*on*f]);}
+  hi(0);// muzzle flashes, tracers, explosions
+  for(const f of DN.flashes){const p=Pj(f.x,f.y,0),k=clamp(f.t/.08,0,1);glow(p[0],p[1],70*sc,.9*k,'#ffd890',.6*k);}
+  for(const b of bullets){if(b.x<vx0||b.x>vx1||b.y<vy0||b.y>vy1)continue;const p=Pj(b.x,b.y,0);G2.push([0,p[0],p[1],8*sc,'#ffe0a0',.7]);}
+  for(const e of explosions){const k=e.t/.6;if(k>=1.6)continue;const p=Pj(e.x,e.y,0),kk=clamp(1-k/1.6,0,1);glow(p[0],p[1],(110+k*90)*sc,kk,'#ff8a2a',.7*kk);}
+  // roofs (screen rects at roof height) mask the ground lights so a street lamp never shines through a building
+  const roofs=[];for(const bd of buildings){if(bd.x1<vx0-80||bd.x0>vx1+80||bd.y1<vy0-80||bd.y0>vy1+80||!bd.h)continue;const a=Pj(bd.x0,bd.y0,bd.h),b=Pj(bd.x1,bd.y1,bd.h);roofs.push([a[0],a[1],b[0]-a[0],b[1]-a[1]]);}
+  if(typeof GAR!=='undefined')for(const Gg of GAR.list){if(Gg.x1<vx0-80||Gg.x0>vx1+80||Gg.y1<vy0-80||Gg.y0>vy1+80)continue;const a=Pj(Gg.x0,Gg.y0,Gg.H[2]),b=Pj(Gg.x1,Gg.y1,Gg.H[2]);roofs.push([a[0],a[1],b[0]-a[0],b[1]-a[1]]);}
+  const wg=dnGlowSpr('#ffffff'),wc=dnConeSpr('#ffffff');
+  const punch=(X,list)=>{X.globalCompositeOperation='destination-out';for(const l of list){if(l[0]===0){const [,x,y,r,a]=l;if(x+r<0||y+r<0||x-r>LW||y-r>LH)continue;X.globalAlpha=clamp(a,0,1);X.drawImage(wg,(x-r)*q,(y-r)*q,2*r*q,2*r*q);}
+    else if(l[0]===2){const [,x,y,w2,h2,a]=l;X.globalAlpha=clamp(a,0,1);X.fillStyle='#000';X.fillRect(x*q,y*q,w2*q,h2*q);}
+    else{const [,x,y,len,wid,ang,a]=l;X.globalAlpha=clamp(a,0,1);X.setTransform(Math.cos(ang)*q,Math.sin(ang)*q,-Math.sin(ang)*q,Math.cos(ang)*q,x*q,y*q);X.drawImage(wc,-len*4/124,-wid/2,len*128/124,wid);X.setTransform(1,0,0,1,0,0);}}
+    X.globalAlpha=1;X.globalCompositeOperation='source-over';};
+  const add=(X,list,k)=>{X.globalCompositeOperation='lighter';for(const l of list){if(l[0]===0){const [,x,y,r,col,ca]=l;if(x+r<0||y+r<0||x-r>LW||y-r>LH)continue;X.globalAlpha=clamp(ca,0,1);X.drawImage(dnGlowSpr(col),(x-r)*k,(y-r)*k,2*r*k,2*r*k);}
+    else if(l[0]===1){const [,x,y,len,wid,ang,col,ca]=l;X.globalAlpha=clamp(ca,0,1);X.setTransform(Math.cos(ang)*k,Math.sin(ang)*k,-Math.sin(ang)*k,Math.cos(ang)*k,x*k,y*k);X.drawImage(dnConeSpr(col),-len*4/124,-wid/2,len*128/124,wid);X.setTransform(1,0,0,1,0,0);}
+    else{const [,x0,y0,x1,y1,col,ca]=l;X.globalAlpha=clamp(ca,0,1);X.strokeStyle=col;X.lineWidth=Math.max(1.5,2.2*sc);X.strokeRect(x0,y0,x1-x0,y1-y0);X.globalAlpha=clamp(ca*.3,0,1);X.lineWidth=Math.max(4,9*sc);X.strokeRect(x0,y0,x1-x0,y1-y0);}}
+    X.globalAlpha=1;X.globalCompositeOperation='source-over';};
+  punch(L,PG);
+  L.fillStyle=`rgba(${nc[0]},${nc[1]},${nc[2]},${A.toFixed(3)})`;for(const [x,y,w2,h2] of roofs)L.fillRect(x*q,y*q,w2*q,h2*q);
+  punch(L,PH);
+  const sm=g.imageSmoothingEnabled;g.imageSmoothingEnabled=true;g.drawImage(DN.lm,0,0,LWq,LHq,0,0,LWq/q,LHq/q);
+  // ground glows go through a second small canvas so roofs can mask them too
+  if(!DN.gm){DN.gm=document.createElement('canvas');DN.gx=DN.gm.getContext('2d');}if(DN.gm.width!==LWq||DN.gm.height!==LHq){DN.gm.width=LWq;DN.gm.height=LHq;}
+  const X=DN.gx;X.setTransform(1,0,0,1,0,0);X.globalCompositeOperation='source-over';X.clearRect(0,0,LWq,LHq);add(X,AG,q);
+  X.globalCompositeOperation='destination-out';X.fillStyle='#000';for(const [x,y,w2,h2] of roofs)X.fillRect(x*q,y*q,w2*q,h2*q);X.globalCompositeOperation='source-over';
+  g.globalCompositeOperation='lighter';g.drawImage(DN.gm,0,0,LWq,LHq,0,0,LWq/q,LHq/q);g.globalCompositeOperation='source-over';g.imageSmoothingEnabled=sm;
+  add(g,AH,1);
+  if(DN.debug)DN.dbg={PG,PH,AG,AH,roofs};
+  DN.stats.roofs=roofs.length;const P_=PG.length+PH.length,G_=AG.length+AH.length;
+  const ms=performance.now()-t0;DN.stats.ms=DN.stats.ms*.9+ms*.1;DN.stats.last=ms;DN.stats.n=P_+G_;}
+// ---- public API for missions / future content
+window.PTA=window.PTA||{};
+PTA.time={DAY_REAL_MIN:DN_DAY_REAL_MIN,
+  getHour:()=>Math.floor(DN.min/60)%24,getMinute:()=>Math.floor(DN.min)%60,getMinutes:()=>DN.min,getDay:()=>DN.day,getPhase:()=>DN.phase,
+  isNight:()=>DN.phase==='night',isDay:()=>DN.phase==='day',darkness:()=>DN.dark,clock:()=>dnClockStr(),
+  inWindow:(h0,h1)=>{const h=DN.min/60;return h0<=h1?h>=h0&&h<h1:h>=h0||h<h1;},          // e.g. inWindow(21,4) for a night job
+  untilHour:h=>{const m=h*60-DN.min;return m>=0?m:m+1440;},                                // game minutes until hour h
+  onPhase:cb=>{DN.cbs.push(cb);return()=>{const i=DN.cbs.indexOf(cb);if(i>=0)DN.cbs.splice(i,1);};},
+  setTime:(h,m)=>dnSetMin(h*60+(m||0),true),waitUntil:h=>dnWaitUntil(h,'api'),
+  requireWindow:(h0,h1,label)=>{if(PTA.time.inWindow(h0,h1))return true;msg((label||'THIS JOB')+' ONLY RUNS '+String(h0).padStart(2,'0')+':00-'+String(h1).padStart(2,'0')+':00','#ffb84a',2.6);return false;}};
 
 </script></body></html>
