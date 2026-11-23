@@ -1234,11 +1234,14 @@ function drawPhone(){const G=phoneGeom(),u=G.u,pw=G.pw,ph=G.ph,px=G.px,py=G.py,D
     y+=4*u;const rowH=v.cards?Math.max(minT,58*u):Math.max(minT,(v.items.some(i=>i.sub)?36:26)*u*(G.big?1.15:1)),rp=v.cards?0:(rowH-(v.items.some(i=>i.sub)?36:26)*u)/2,footH=v.foot.length*14*u+10*u,maxRows=Math.max(1,Math.floor((sy+sh-footH-y)/rowH)),off=clamp(phone.sel-maxRows+1,0,Math.max(0,v.items.length-maxRows));
     v.items.slice(off,off+maxRows).forEach((it,j)=>{const i=j+off,sel=i===phone.sel,ry=y+j*rowH;
       if(v.cards){const ch=rowH-5*u,k=rowH/(60*u);ctx.fillStyle=sel?'rgba(255,210,58,.2)':'rgba(255,255,255,.07)';uiRRect(ctx,sx+5*u,ry,sw-10*u,ch,8*u);ctx.fill();ctx.strokeStyle=sel?'#ffd23a':it.col||'rgba(255,255,255,.22)';ctx.lineWidth=(sel?2.5:1.5)*u;ctx.stroke();
-        ctx.textAlign='left';ctx.textBaseline='top';ctx.font='bold '+Math.round(15*u)+'px '+FONT;ctx.fillStyle='#fff';const pw2=it.pips?it.pips[1]*14*u+10*u:0;ctx.fillText(clipText(it.label,sw-30*u-pw2),sx+13*u,ry+6*u*k);
+        ctx.textAlign='left';ctx.textBaseline='top';ctx.font='bold '+Math.round(15*u)+'px '+FONT;ctx.fillStyle=it.dis?'#99a':'#fff';const pw2=it.pips?it.pips[1]*14*u+10*u:0;ctx.fillText(clipText(it.label,sw-30*u-pw2),sx+13*u,ry+6*u*k);
         if(it.pips){const [a2,b2]=it.pips;for(let q=0;q<b2;q++){ctx.fillStyle=q<a2?'#40e070':'rgba(255,255,255,.2)';ctx.fillRect(sx+sw-14*u-(b2-q)*14*u,ry+8*u*k,11*u,11*u);}}
         let rw=0;if(it.right){ctx.textAlign='right';ctx.font='bold '+Math.round(13*u)+'px '+FONT;ctx.fillStyle=it.rcol||'#8f8';ctx.fillText(it.right,sx+sw-14*u,ry+25*u*k);rw=ctx.measureText(it.right).width+12*u;}
         ctx.textAlign='left';if(it.sub){ctx.font='bold '+Math.round(11*u)+'px '+FONT;ctx.fillStyle='#bde';ctx.fillText(clipText(it.sub,sw-28*u-rw),sx+13*u,ry+26*u*k);}
-        if(it.sub2){ctx.font=Math.round(10*u)+'px '+FONT;ctx.fillStyle='#9ab';ctx.fillText(clipText(it.sub2,sw-26*u),sx+13*u,ry+41*u*k);}
+        if(it.bar){const bx=sx+13*u,bw=sw-26*u,by=ry+41*u*k,bh=9*u;ctx.fillStyle='rgba(0,0,0,.45)';ctx.fillRect(bx,by,bw,bh);ctx.fillStyle=it.bar.c||'#4a8cff';
+          if(it.bar.mid){const c0=bx+bw/2,c1=bx+bw*clamp(it.bar.v,0,1);ctx.fillRect(Math.min(c0,c1),by,Math.abs(c1-c0),bh);ctx.fillStyle='#fff';ctx.fillRect(c0-1*u,by-2*u,2*u,bh+4*u);}
+          else ctx.fillRect(bx,by,bw*clamp(it.bar.v,0,1),bh);ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=1*u;ctx.strokeRect(bx,by,bw,bh);}
+        else if(it.sub2){ctx.font=Math.round(10*u)+'px '+FONT;ctx.fillStyle='#9ab';ctx.fillText(clipText(it.sub2,sw-26*u),sx+13*u,ry+41*u*k);}
         uiRects.push({tag:'row:'+i,x:sx,y:ry,w:sw,h:rowH,fn:()=>{phone.sel=i;phoneKey('Enter');}});return;}
       if(G.big){ctx.fillStyle='rgba(255,255,255,.05)';ctx.fillRect(sx+4*u,ry,sw-8*u,rowH-3*u);}
       if(sel){ctx.fillStyle='rgba(255,210,58,.22)';ctx.fillRect(sx+4*u,ry,sw-8*u,rowH-3*u);ctx.fillStyle='#ffd23a';ctx.fillRect(sx+4*u,ry,3*u,rowH-3*u);}
@@ -4409,5 +4412,184 @@ function v6DrawCard(F,u){const c=F.card,f=c.f,w=390*u,h=250*u,x=W/2-w/2,y=clamp(
 // ---------------------------------------------------------------- debug / tests
 window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get f6(){return{get F(){return F6;},set F(v){F6=v;},FISH6,FSPOT6,BAIT6,V6,COOLER6,start:v6Start,avail:v6Avail,cancel:v6Cancel,
   openBait:openBait6,PERKS6,PK,perkBuy:perkBuy6,perkWhy:perkWhy6,addAXP:addAXP6,axpNeed,cool6,SCH6,schoolNear:v6SchoolNear,offshore:v6Offshore,perksView:v6PerksView,log:FL,eat:v6Eat,sellItems:v6SellItems,tick:v6Tick,zone:v6BoatZone,K:F6K};}}));
+
+// ======================================================================
+//  v6r: STANDING - cop goodwill (0..100, 5 tiers + perks) earned by
+//  systemic good deeds, and three Miami gangs with turf + respect
+//  (-100..100). Light cop favors / gang jobs from PHONE > STANDING.
+//  Gang names are PLACEHOLDERS from the research page (rename freely).
+// ======================================================================
+const RR7=mulberry32(707),r7=()=>RR7(),r7r=(a,b)=>a+RR7()*(b-a),r7p=a=>a[Math.floor(RR7()*a.length)];
+const GW7={tiers:[{n:'NOBODY',at:0},{n:'KNOWN FACE',at:15},{n:'FRIENDLY',at:35},{n:'TRUSTED',at:60},{n:'UNTOUCHABLE',at:85}],
+  burn:[1,1.25,1.6,2,2.6],seen:[5,4.5,4,3.5,3],fine:[0,.1,.25,.4,.6],bust:[0,.25,.5,.75,1],
+  gain:{mugger:6,thief:6,crash:3,ticket:7,stolen:9,snitch:10},loss:{civ:8,cop:20,gangKill:2,shootCop:4,busted:3,witMax:6,gangJob:5}};
+const GANGS7=[
+  {id:'saints',name:'Neon Saints',col:'#ff3cc8',col2:'#40f0ff',turf:['SOUTH BEACH','OCEAN DRIVE','SOUTH BEACH SANDS'],area:'South Beach',rival:'sharks'},
+  {id:'sharks',name:'Marina Sharks',col:'#18a8c8',col2:'#f0f0f0',turf:['MARINA','BAYSIDE'],area:'Marina & Bayside',rival:'saints'},
+  {id:'union',name:'Dockside Union',col:'#f0a018',col2:'#2a2a2a',turf:['PORT OF MIAMI'],area:'Port of Miami',rival:'saints'}];
+const GANG7_BY={};GANGS7.forEach(g=>{GANG7_BY[g.id]=g;g.short=g.name.split(' ')[1];});
+const GRT7=[{n:'AT WAR',at:-100,c:'#ff4040'},{n:'WARY',at:-40,c:'#ffa040'},{n:'NEUTRAL',at:-10,c:'#d8d8d8'},{n:'FRIENDLY',at:20,c:'#80e080'},{n:'FAMILY',at:60,c:'#40ff90'}];
+const V7={stats:{gain:0,loss:0,warn:0,slide:0,mug:0,thief:0,crash:0,favors:0,jobs:0,noShoot:0,tierUp:0,tierDown:0},offers:null,offerT:30,turf:null,lastCaught:0,cd:{},notes:[]};
+function RP(){let R=career.rep;if(!R||typeof R!=='object'){R=career.rep={gw:0,g:{saints:0,sharks:0,union:0},lt:0,best:0,warnCd:0,killEp:false};}if(!R.g)R.g={saints:0,sharks:0,union:0};for(const g of GANGS7)if(typeof R.g[g.id]!=='number')R.g[g.id]=0;return R;}
+function gwTier(v){const R=v==null?RP().gw:v;let t=0;GW7.tiers.forEach((x,i)=>{if(R>=x.at)t=i;});return t;}
+function gwName(t){return GW7.tiers[t==null?gwTier():t].n;}
+function gTier(v){let t=0;GRT7.forEach((x,i)=>{if(v>=x.at)t=i;});return t;}
+function turf7(x,y){const d=DISTRICTS[districtAt(x,y)];if(!d)return null;for(const g of GANGS7)if(g.turf.includes(d.name))return g;return null;}
+function r7Cd(k,s){const t=gtime;if((V7.cd[k]||-99)>t)return false;V7.cd[k]=t+s;return true;}
+function gwAdd(v,why){if(state!=='play'&&state!=='dead')return 0;const R=RP(),t0=gwTier();const a=R.gw;R.gw=clamp(Math.round((R.gw+v)*10)/10,0,100);const d=R.gw-a;if(!d)return 0;
+  if(d>0)V7.stats.gain+=d;else V7.stats.loss-=d;V7.notes.push([why,d]);if(V7.notes.length>30)V7.notes.shift();
+  if(why)notify((d>0?'+':'')+Math.round(d)+' COP GOODWILL \u2014 '+why,'rep',d>0?1:0,{col:d>0?'#8cf':'#f98'});
+  const t1=gwTier();if(t1!==t0){if(t1>t0){V7.stats.tierUp++;msg('COPS: YOU ARE NOW '+gwName(t1)+'!','#7cf',3);notify('STANDING UP: THE COPS SEE YOU AS '+gwName(t1)+'  ('+gwPerkShort(t1)+')','rep',2,{col:'#7cf'});sfx('level');}
+    else{V7.stats.tierDown++;msg('COPS: YOU DROPPED TO '+gwName(t1),'#f98',3);notify('STANDING DOWN: THE COPS NOW SEE YOU AS '+gwName(t1),'rep',2,{col:'#f98'});}}
+  R.best=Math.max(R.best||0,R.gw);return d;}
+function gAdd(id,v,why,quiet){const R=RP(),g=GANG7_BY[id];if(!g)return 0;const a=R.g[id],t0=gTier(a);R.g[id]=clamp(Math.round(a+v),-100,100);const d=R.g[id]-a;if(!d)return 0;
+  if(why&&!quiet)notify((d>0?'+':'')+d+' RESPECT '+g.name.toUpperCase()+' \u2014 '+why,'rep',d>0?1:0,{col:d>0?'#9f9':'#f98'});
+  const t1=gTier(R.g[id]);if(t1!==t0)notify(g.name.toUpperCase()+': YOU ARE NOW '+GRT7[t1].n+(t1===0?' - THEY WILL ATTACK YOU ON THEIR TURF':t1>=3?' - THEY LEAVE YOU ALONE':''),'rep',2,{col:GRT7[t1].c});return d;}
+function gwPerkShort(t){return['no perks yet','stars fade faster, cheaper fines','cops warn you for minor stuff','cops hold fire unless you kill','cops let small stuff slide'][t];}
+function gwPerks(t){const L=[];if(GW7.burn[t]>1)L.push('Stars fade '+GW7.burn[t]+'x');if(GW7.fine[t])L.push('Fines -'+Math.round(GW7.fine[t]*100)+'%');if(GW7.bust[t])L.push('Bust refund '+Math.round(GW7.bust[t]*100)+'%');if(t>=3)L.push('Keep guns');
+  if(t>=2)L.push('Warning first');if(t>=3)L.push('Hold fire');if(t>=4)L.push('Small stuff slides');return L;}
+function noShoot7(){return gwTier()>=3&&!RP().killEp;}
+// ---------------------------------------------------------------- losses: kills, hits, witnessed crimes, busts
+let R7inKill=false;
+killPed=(o=>function(p,byPlayer){if(p.dead)return o(p,byPlayer);const crook=(p.kind==='mugger'&&p.mug)||(p.thief&&p.goCar)||p.r7target,wasHost=p.hostile,gang=p.gang;R7inKill=true;try{o(p,byPlayer);}finally{R7inKill=false;}
+  if(!byPlayer||state!=='play')return;const R=RP();
+  if(p.cop){R.killEp=true;gwAdd(-GW7.loss.cop,'YOU KILLED A COP');return;}
+  if(gang){const g=GANG7_BY[gang];gAdd(gang,-10,'YOU KILLED ONE OF THEIRS');if(g)gAdd(g.rival,4,'YOU HIT THEIR RIVALS',true);R.killEp=true;if(!wasHost)gwAdd(-GW7.loss.gangKill,'GANG KILLING');return;}
+  if(crook)return;R.killEp=true;gwAdd(-GW7.loss.civ,'CIVILIAN KILLED');})(killPed);
+addHeat=(o=>function(v){if(!(v>0)||state!=='play')return o(v);const R=RP(),t=gwTier(),tg=player.inCar||player;
+  if(R7inKill||V7.supT>gtime)return o(R7inKill?v:0);
+  const copNear=copWitness(tg.x,tg.y)||cars.some(c=>c.type==='police'&&c.driver==='cop'&&!c.wreck&&Math.hypot(c.x-tg.x,c.y-tg.y)<300);
+  if(v<=35&&stars===0&&heat<STAR[1]){
+    if(t>=2&&copNear&&gtime>=(R.warnCd||0)){R.warnCd=gtime+(t>=4?40:120);V7.stats.warn++;msg('OFFICER: "I\'LL LET THAT ONE SLIDE. DON\'T PUSH IT."','#9cf',2.8);r7Bubble(r7NearCop(tg,340),'warn');return;}
+    if(t>=4&&!copNear&&r7()<.5){V7.stats.slide++;notify('PRECINCT: "THAT\'S OUR FRIEND - LET IT SLIDE."','cops',0,{col:'#9cf'});return;}}
+  if(copNear&&r7Cd('wit',.8))gwAdd(-Math.min(GW7.loss.witMax,Math.max(1,Math.round(v*.05))),'A COP SAW THAT');
+  return o(v);})(addHeat);
+busted=(o=>function(){if(state!=='play')return o();const t=gwTier(),m0=player.money,keepAmmo=player.ammo.slice(),keepOwned=(player.owned||[]).slice(),wp=player.wp;o();
+  const fine=m0-player.money,ref=Math.floor(fine*GW7.bust[t]);if(ref>0){player.money+=ref;msg('YOUR COP FRIENDS KNOCK $'+ref+' OFF THE FINE','#9cf',3);}
+  if(t>=3){player.ammo=keepAmmo;player.owned=keepOwned;player.wp=wp;msg('THEY LET YOU KEEP YOUR GUNS','#9cf',3);}gwAdd(-GW7.loss.busted,'BUSTED');})(busted);
+finePrice5=(o=>function(){return Math.round(o()*(1-GW7.fine[gwTier()]));})(finePrice5);
+// ---------------------------------------------------------------- the per-frame bit
+function r7NearCop(tg,r){let b=null,bd=r||300;for(const q of peds){if(!q.cop||q.dead)continue;const d=Math.hypot(q.x-tg.x,q.y-tg.y);if(d<bd){bd=d;b=q;}}return b;}
+function r7Bubble(p,k){if(p){p.r7b={k,t:2.6};}}
+update=(o=>function(dt){if(state==='play'&&noShoot7()&&stars>0){for(const q of peds)if(q.cop&&!q.dead){if(q.shootT<.3){q.shootT=.3;V7.stats.noShoot+=dt;}}for(const c of cars)if(c.cb&&c.cb.shootT<.3)c.cb.shootT=.3;}
+  o(dt);try{r7Tick(dt);}catch(e){console.error(e);}})(update);
+function r7Tick(dt){if(state!=='play')return;const R=RP(),p=player,tg=p.inCar||p,t=gwTier();
+  // burn-down perk
+  if(heat>0&&lastSeen>GW7.seen[t]){const base=stars>=4?22:32,m=lastSeen>5?GW7.burn[t]-1:GW7.burn[t];if(m>0)heat=Math.max(0,heat-base*m*dt);}
+  if(stars===0){R.calmT=(R.calmT||0)+dt;if(R.calmT>3)R.killEp=false;}else R.calmT=0;
+  // good deeds
+  if(typeof EV!=='undefined'){if(EV.stats.caught>V7.lastCaught){const n=EV.stats.caught-V7.lastCaught;for(let i=0;i<n;i++){V7.stats.mug++;gwAdd(GW7.gain.mugger,'MUGGER STOPPED');}}V7.lastCaught=EV.stats.caught;}
+  for(const q of peds){if(q.dead){continue;}
+    // stopping a car thief mid-theft (knocked down near you)
+    if(q.thief&&q.goCar&&q.down>0&&!q.r7done&&Math.hypot(q.x-tg.x,q.y-tg.y)<120){q.r7done=true;const c=q.goCar.c;if(c&&c.leaving===q)c.leaving=null;q.goCar=null;q.thief=false;q.kind='ped';V7.stats.thief++;gwAdd(GW7.gain.thief,'CAR THIEF STOPPED');addMoney(40);}
+    // hp drops on cops / gang members near you (your hits)
+    if(q._hp7!==undefined&&q.hp<q._hp7&&Math.hypot(q.x-tg.x,q.y-tg.y)<420){if(q.cop&&r7Cd('hitcop',1))gwAdd(-GW7.loss.shootCop,'YOU HURT A COP');
+      if(q.gang&&r7Cd('hit'+q.gang,1.2)){gAdd(q.gang,-3,'YOU ROUGHED UP A MEMBER');q.r7angry=8;}}
+    q._hp7=q.hp;
+    if(q.r7b){q.r7b.t-=dt;if(q.r7b.t<=0)q.r7b=null;}
+    if(q.cop&&stars===0&&t>=2&&!q.r7b&&Math.hypot(q.x-tg.x,q.y-tg.y)<130&&gtime>(q.r7w||0)){q.r7w=gtime+14;r7Bubble(q,t>=3?'hat':'wave');}
+    if(q.gang)r7GangPed(q,dt,R,tg);}
+  // turf
+  const tf=turf7(tg.x,tg.y),tid=tf&&tf.id;if(tid!==V7.turf){V7.turf=tid;if(tf){const v=R.g[tid],gt=GRT7[gTier(v)];notify(tf.name.toUpperCase()+' TURF  \u2014  '+gt.n+' ('+(v>0?'+':'')+v+')','rep',1,{col:gt.c});V7.turfT=4;}}
+  if(V7.turfT>0)V7.turfT-=dt;
+  // offers + tasks
+  V7.offerT-=dt;if(!V7.offers||V7.offerT<=0){r7MakeOffers();V7.offerT=150;if(!V7.task&&state==='play')notify('PHONE > STANDING: '+V7.offers.cop.title,'rep',0,{col:'#9cf'});}
+  if(V7.task)r7TaskTick(dt);}
+// gang members: hostile at war on their turf, greet when friendly
+function r7GangPed(q,dt,R,tg){const v=R.g[q.gang],d=Math.hypot(q.x-tg.x,q.y-tg.y),on=turf7(q.x,q.y);if(q.r7angry>0)q.r7angry-=dt;
+  if(d>320||!player.active){if(q.r7host){q.hostile=false;q.r7host=false;}return;}
+  const war=v<=-40&&on&&on.id===q.gang,mad=q.r7angry>0&&v<20;
+  if((war||mad)&&(d<240&&los(q.x,q.y,tg.x,tg.y))){if(!q.hostile&&!q.r7host){r7Bubble(q,'mad');}q.hostile=true;q.hostT=Math.max(q.hostT||0,4);q.r7host=true;}
+  else if(q.r7host&&!war&&!mad){q.hostile=false;q.r7host=false;q.state='wander';}
+  else if(!q.hostile&&v>=20&&d<110&&gtime>(q.r7w||0)){q.r7w=gtime+16;r7Bubble(q,'yo');}}
+// spawn gang members on their turf (groups of 2-3)
+spawnPed=(o=>function(r0,r1){o(r0,r1);if(state!=='play')return;const gg=turf7(focus.x,focus.y);if(!gg||r7()>.3)return;let n=0;for(const q of peds)if(q.gang&&!q.dead&&Math.hypot(q.x-focus.x,q.y-focus.y)<900)n++;if(n>=7)return;
+  const s=ringTile(r0,r1,t=>t===SIDE||t===SAND);if(!s||turf7(s.x,s.y)!==gg)return;const k=2+(r7()<.4?1:0);for(let i=0;i<k;i++)r7GangMember(gg,s.x+r7r(-14,14),s.y+r7r(-14,14));})(spawnPed);
+function r7GangMember(gg,x,y){const q=makePed(x,y,false);q.kind='thug';q.gang=gg.id;q.hp=45;q.gun=r7()<.55;q.brave=true;
+  q.outfit={top:{t:r7()<.5?'tee':'jacket',c:gg.col},pants:{t:'jeans',c:'#1c1c26'},shoes:{t:'sneakers',c:'#111'},hat:{t:'cap',c:gg.col2},glasses:r7()<.5?{t:'shades',c:'#111'}:null,hair:{t:'buzz',c:'#111'}};
+  q.shirt=gg.col;peds.push(q);return q;}
+// ---------------------------------------------------------------- favors (cops) + jobs (gangs)
+function r7Spot(pred,nearX,nearY,r0,r1){for(let i=0;i<500;i++){const far=i>250,a=r7()*TAU,dd=far?r7r(0,3500):r7r(r0,r1),x=nearX+Math.cos(a)*dd,y=nearY+Math.sin(a)*dd;if(x<T||y<T||x>WORLD-T||y>WORLD-T)continue;
+    const t=tileW(x,y);if(t!==SIDE&&t!==SAND)continue;if(pred&&!pred(x,y))continue;return{x:Math.floor(x/T)*T+T/2,y:Math.floor(y/T)*T+T/2};}
+  /* deterministic fallback: scan the whole map, prefer spots inside the wanted ring, else nearest */
+  const ok=[],ring=[];for(let ty=1;ty<N-1;ty+=2)for(let tx=1;tx<N-1;tx+=2){const t=map[ty*N+tx];if(t!==SIDE&&t!==SAND)continue;const x=tx*T+T/2,y=ty*T+T/2;if(pred&&!pred(x,y))continue;const d=Math.hypot(x-nearX,y-nearY);ok.push([d,x,y]);if(d>=r0&&d<=r1)ring.push([d,x,y]);}
+  const L=ring.length?ring:ok;if(!L.length)return null;let b;if(ring.length)b=L[Math.floor(r7()*L.length)];else{b=L[0];for(const e of L)if(e[0]<b[0])b=e;}return{x:b[1],y:b[2]};}
+function r7Parked(x,y,r0,r1){let b=null;for(const c of cars){if(!(c.rest||c.lotCar||(!c.ai&&!c.towed))||c.driver||c.wreck||c.boat||c.everPlayer||c.towed||c.tow)continue;const d=Math.hypot(c.x-x,c.y-y);if(d>r0&&d<r1){b=c;if(r7()<.3)break;}}return b;}
+function r7TaskCar(x,y,r0,r1){let c=r7Parked(x,y,r0,r1);
+  if(!c&&typeof W4!=='undefined'){const L=W4.stalls.filter(st=>st.kind==='curb'&&!st.car&&!st.res&&(d=>d>r0&&d<r1)(Math.hypot(st.x-x,st.y-y))&&!carNear(st.x,st.y,22));
+    if(L.length){const st=L[Math.floor(r7()*L.length)];c=makeCar(r7p(['sedan','sedan','sport','van','taxi']),st.x,st.y,st.a);cars.push(c);}}
+  if(!c&&lotSlots.length){const L=lotSlots.filter(sl=>(d=>d>r0&&d<r1)(Math.hypot(sl.x-x,sl.y-y))&&!carNear(sl.x,sl.y,22));if(L.length){const sl=L[Math.floor(r7()*L.length)];c=makeCar(r7p(['sedan','sport','van']),sl.x,sl.y,sl.a);cars.push(c);}}
+  if(!c)return null;if(c.curb&&typeof w4Detach==='function')w4Detach(c);c.r7keep=!c.keep;c.keep=true;c.vx=c.vy=0;return c;}
+function r7Release(c){if(c&&c.r7keep){c.keep=false;c.r7keep=false;}}
+function r7MakeOffers(){const ck=r7p(['ticket','stolen','snitch']),sg=r7p(GANGS7);const cop={kind:ck,gang:ck==='snitch'?sg.id:null};
+  cop.title=ck==='ticket'?'COP FAVOR: Ticket a parked car':ck==='stolen'?'COP FAVOR: Return a stolen car':'COP FAVOR: Tip off a gang stash';
+  const gangs={};for(const g of GANGS7)gangs[g.id]={kind:r7p(['deliver','hit']),gang:g.id};V7.offers={cop,gangs};}
+function r7Accept(o){if(V7.task){msg('FINISH OR CANCEL YOUR CURRENT TASK FIRST','#fc8',2);return;}if(typeof mission!=='undefined'&&mission){msg('FINISH YOUR CURRENT JOB FIRST','#fc8',2);return;}
+  const tg=player.inCar||player,R=RP();let T7=null;
+  if(o.kind==='ticket'){const c=r7TaskCar(tg.x,tg.y,200,1100);if(!c){msg('NO PARKED CARS NEARBY - TRY ANOTHER STREET','#fc8',2);return;}T7={kind:'ticket',giver:'cops',car:c,obj:'Ticket the parked car',x:c.x,y:c.y};}
+  else if(o.kind==='stolen'){const c=r7TaskCar(tg.x,tg.y,250,1300);if(!c){msg('NO REPORTED CARS NEARBY RIGHT NOW','#fc8',2);return;}c.r7hot=true;T7={kind:'stolen',giver:'cops',car:c,stage:0,obj:'Find the stolen car',x:c.x,y:c.y};}
+  else if(o.kind==='snitch'){const g=GANG7_BY[o.gang];const s=r7Spot((x,y)=>{const f=turf7(x,y);return f&&f.id===g.id;},tg.x,tg.y,300,2500);if(!s){msg('CAN\'T FIND THAT STASH RIGHT NOW','#fc8',2);return;}
+    T7={kind:'snitch',giver:'cops',gang:g.id,obj:'Photograph the '+g.short+' stash',x:s.x,y:s.y};}
+  else if(o.kind==='deliver'){const g=GANG7_BY[o.gang];if(R.g[g.id]<=-40){msg(g.name.toUpperCase()+' WON\'T WORK WITH YOU','#f88',2);return;}const inT=(x,y)=>{const f=turf7(x,y);return f&&f.id===g.id;};
+    const a=r7Spot(inT,tg.x,tg.y,200,2200);if(!a){msg('NO PICKUP SPOT FOUND','#fc8',2);return;}const b=r7Spot((x,y)=>Math.hypot(x-a.x,y-a.y)>500,a.x,a.y,550,1400);if(!b){msg('NO DROP SPOT FOUND','#fc8',2);return;}
+    T7={kind:'deliver',giver:g.id,gang:g.id,stage:0,a,b,obj:'Pick up the '+g.short+' package',x:a.x,y:a.y};}
+  else if(o.kind==='hit'){const g=GANG7_BY[o.gang],rv=GANG7_BY[g.rival];if(R.g[g.id]<=-40){msg(g.name.toUpperCase()+' WON\'T WORK WITH YOU','#f88',2);return;}
+    const s=r7Spot((x,y)=>{const f=turf7(x,y);return f&&f.id===rv.id;},tg.x,tg.y,300,2600);if(!s){msg('NO TARGET FOUND','#fc8',2);return;}T7={kind:'hit',giver:g.id,gang:g.id,rival:rv.id,obj:'Take down the '+rv.short+' lieutenant',x:s.x,y:s.y,ped:null};}
+  if(!T7)return;T7.t=0;V7.task=T7;phone.open=false;msg(T7.obj.toUpperCase(),'#ffd23a',2.6);sfx('phone');}
+function r7Cancel(why){if(!V7.task)return;const T7=V7.task;if(T7.car){T7.car.r7hot=false;r7Release(T7.car);}if(T7.ped&&!T7.ped.dead){T7.ped.r7target=false;}V7.task=null;if(why)msg(why,'#fc8',2);}
+function r7Done(){const T7=V7.task,R=RP();V7.task=null;if(T7&&T7.car){T7.car.r7hot=false;r7Release(T7.car);}r7MakeOffers();V7.offerT=150;
+  if(T7.giver==='cops'){V7.stats.favors++;const g=GW7.gain[T7.kind]||6,cash={ticket:60,stolen:200,snitch:150}[T7.kind]||50;addMoney(cash);gainXP(8);
+    gwAdd(g,T7.kind==='ticket'?'TICKET WRITTEN':T7.kind==='stolen'?'STOLEN CAR RETURNED':'GANG TIP-OFF');
+    if(T7.kind==='snitch'){const gg=GANG7_BY[T7.gang];gAdd(T7.gang,-15,'THEY HEARD WHO TALKED');msg('THE '+gg.name.toUpperCase()+' WILL HEAR WHO TALKED...','#f98',2.6);}
+    msg('FAVOR DONE  +$'+cash,'#9cf',2.4);sfx('cash');}
+  else{V7.stats.jobs++;const g=GANG7_BY[T7.gang];addMoney(350);gainXP(10);gAdd(g.id,15,'JOB DONE');gAdd(g.rival,-10,'YOU WORKED FOR '+g.name.toUpperCase());gwAdd(-GW7.loss.gangJob,'GANG WORK');msg(g.name.toUpperCase()+' JOB DONE  +$350','#9f9',2.4);sfx('cash');}}
+function r7TaskTick(dt){const T7=V7.task,p=player,tg=p.inCar||p;T7.t+=dt;
+  if(T7.kind==='stolen'){const c=T7.car;if(!cars.includes(c)||c.wreck){r7Cancel('THE STOLEN CAR IS GONE - FAVOR CANCELLED');return;}
+    if(T7.stage===0){T7.x=c.x;T7.y=c.y;if(p.inCar===c){T7.stage=1;V7.supT=gtime+2;const ps=nearestPOI('pstation',c.x,c.y);T7.ps=ps;T7.obj='Drive the stolen car to the '+(ps?ps.name:'precinct');if(ps){T7.x=ps.spot.x;T7.y=ps.spot.y;}msg(T7.obj.toUpperCase(),'#ffd23a',2.4);}}
+    else if(p.inCar===c&&Math.hypot(c.x-T7.x,c.y-T7.y)<90){c.r7hot=false;r7Done();}
+    else if(p.inCar!==c){T7.stage=0;T7.obj='Get back in the stolen car';}}
+  else if(T7.kind==='hit'){let q=T7.ped;if((!q||!peds.includes(q))&&Math.hypot(tg.x-T7.x,tg.y-T7.y)<700){q=T7.ped=r7GangMember(GANG7_BY[T7.rival],T7.x,T7.y);q.r7target=true;q.hp=60;q.gun=true;q.keep=true;}
+    if(q){T7.x=q.x;T7.y=q.y;if(q.dead||q.down>0){r7Done();}}}
+  else if(T7.kind==='ticket'){if(!cars.includes(T7.car)||T7.car.driver){r7Cancel('THAT CAR DROVE OFF - FAVOR CANCELLED');return;}T7.x=T7.car.x;T7.y=T7.car.y;}}
+// E prompts for tasks + crash call-ins
+computePrompts=(o=>function(){o();const p=player;if(!p.active||state!=='play'||fade||interior)return;const T7=V7.task,tg=p.inCar||p;
+  const put=(d,label,act)=>{if(!prompts.E||d<prompts.E.d||prompts.E.r7low)prompts.E={d,label,act};};
+  if(T7&&!p.inCar){if(T7.kind==='ticket'){const d=carDist(T7.car,p.x,p.y);if(d<26)put(d-30,'Write a parking ticket',()=>{if(V7.task===T7)r7Done();});}
+    else if(T7.kind==='snitch'){const d=Math.hypot(p.x-T7.x,p.y-T7.y);if(d<34)put(d-30,'Photograph the stash (tip off the cops)',()=>{if(V7.task===T7)r7Done();});}
+    else if(T7.kind==='deliver'){const d=Math.hypot(p.x-T7.x,p.y-T7.y);if(d<34)put(d-30,T7.stage===0?'Grab the package':'Drop off the package',()=>{if(V7.task!==T7)return;if(T7.stage===0){T7.stage=1;T7.x=T7.b.x;T7.y=T7.b.y;T7.obj='Deliver the package';msg('DELIVER THE PACKAGE','#ffd23a',2);sfx('pick');}else r7Done();});}}
+  if(!p.inCar&&stars===0&&typeof EV!=='undefined')for(const j of EV.jobs){if(j.done||j.r7called||(j.kind!=='crash'&&j.kind!=='med'))continue;const d=Math.hypot(p.x-j.x,p.y-j.y);if(d<110){put(d,'Call 911 for the '+(j.kind==='crash'?'crash':'injured'),()=>{j.r7called=true;V7.stats.crash++;gwAdd(GW7.gain.crash,'YOU CALLED IT IN');try{if(!j.units.length)dispatchCop(j);}catch(e){}});break;}}})(computePrompts);
+// GPS + objective pill
+gpsTarget=(o=>function(){const r=o();if(r&&r.mission)return r;const T7=V7.task;if(T7&&state==='play')return{x:T7.x,y:T7.y,label:T7.obj};return r;})(gpsTarget);
+// ---------------------------------------------------------------- drawing: bubbles over cops/gang members, hot car marker
+drawPed=(o=>function(p,G){o(p,G);if(G&&G!==g)return;const b=p.r7b;const tgt=p.r7target&&!p.dead;if(!b&&!tgt&&!(p.gang&&!p.dead&&V7.turfT>0))return;
+  if(p.dead)return;const x=p.x,y=p.y-15;g.save();
+  if(tgt){const s=1+.15*Math.sin(gtime*6);g.strokeStyle='#ff3030';g.lineWidth=1.6;g.beginPath();g.arc(p.x,p.y,10*s,0,TAU);g.stroke();}
+  if(b){const a=Math.min(1,b.t*3);g.globalAlpha=a;g.translate(x,y+4);g.scale(1.5,1.5);g.translate(-x,-y);const w=b.k==='warn'?26:16,h=12;g.fillStyle=b.k==='mad'?'#ff4040':'#ffffff';g.strokeStyle='#000';g.lineWidth=1;
+    g.beginPath();g.roundRect?g.roundRect(x-w/2,y-h,w,h,4):g.rect(x-w/2,y-h,w,h);g.fill();g.stroke();g.beginPath();g.moveTo(x-2,y);g.lineTo(x,y+3);g.lineTo(x+2,y);g.fill();
+    g.fillStyle='#000';g.font='bold 8px '+FONT;g.textAlign='center';g.textBaseline='middle';
+    if(b.k==='wave'||b.k==='hat'){if(b.k==='hat'){g.fillStyle='#1a2a5a';g.fillRect(x-6,y-6,12,2);g.fillRect(x-3.5,y-10,7,4);g.fillStyle='#ffd23a';g.fillRect(x-1,y-9,2,2);}
+      else{const sw=Math.sin(gtime*10)*.35;g.save();g.translate(x,y-4);g.rotate(sw);g.fillStyle='#f0c8a0';g.fillRect(-3,-2,6,5);for(let i=0;i<4;i++)g.fillRect(-3+i*1.6,-6,1.1,4);g.fillRect(3,0,2.2,1.3);g.restore();}}
+    else g.fillText(b.k==='warn'?'EASY!':b.k==='yo'?'YO!':'!!',x,y-5.5);}
+  g.restore();})(drawPed);
+drawCar=(o=>function(c){o(c);if(!c.r7hot||c.wreck)return;g.save();g.strokeStyle=Math.floor(gtime*4)%2?'#ffd23a':'#ff4040';g.lineWidth=2;g.translate(c.x,c.y);g.rotate(c.a);g.strokeRect(-c.L/2-3,-c.W/2-3,c.L+6,c.W+6);g.restore();})(drawCar);
+drawHUD=(o=>function(){o();const T7=V7.task;if(!T7||state!=='play'||interior||menu||phone.open||fade)return;try{const u=U*TXS()*1.05,y=Math.max(70*U,H*.125);
+  v6Pill((T7.giver==='cops'?'COP FAVOR: ':GANG7_BY[T7.giver].name.toUpperCase()+' JOB: ')+T7.obj,null,T7.giver==='cops'?'#6aa0ff':GANG7_BY[T7.giver].col,W/2,y,u);}catch(e){console.error(e);}})(drawHUD);
+// ---------------------------------------------------------------- phone app: STANDING
+{const si=APPS.findIndex(a=>a.id==='system');APPS.splice(si<0?APPS.length:si,0,{id:'standing',name:'STANDING',col:'#e8a020',g:'\u2696'});}
+function r7View(){const R=RP(),t=gwTier(),v={title:'STANDING',lines:[],items:[],foot:[],cards:true};if(!V7.offers)r7MakeOffers();
+  const nx=GW7.tiers[t+1],J='  \u2022  ';v.items.push({label:'POLICE GOODWILL  '+Math.round(R.gw),right:gwName(t),rcol:'#8cf',sub:nx?'Next: '+nx.n+' at '+nx.at:'Top tier (max 100)',bar:{v:R.gw/100,c:'#4a8cff'},act:()=>{}});
+  const pk=gwPerks(t);if(!pk.length)v.items.push({label:'YOUR COP PERKS',right:'',sub:'None yet. Stop muggers,',sub2:'car thieves, call in crashes',act:()=>{}});
+  for(let i=0;i<pk.length;i+=4)v.items.push({label:i?'MORE COP PERKS':'YOUR COP PERKS',right:'',sub:pk.slice(i,i+2).join(J),sub2:pk.slice(i+2,i+4).join(J)||(t<4?'Next: '+gwPerkShort(t+1):''),act:()=>{}});
+  for(const g of GANGS7){const r=R.g[g.id],gt=GRT7[gTier(r)];v.items.push({label:g.name+'  '+(r>0?'+':'')+r,right:gt.n,rcol:gt.c,col:g.col,sub:'Turf: '+g.area,bar:{v:(r+100)/200,c:gt.c,mid:true},act:()=>{}});}
+  const T7=V7.task;if(T7)v.items.push({label:T7.giver==='cops'?'ACTIVE: COP FAVOR':'ACTIVE: '+GANG7_BY[T7.giver].short.toUpperCase()+' JOB',right:'CANCEL',rcol:'#f88',col:'#ffd23a',sub:T7.obj,sub2:'Select to cancel',act:()=>r7Cancel('TASK CANCELLED')});
+  else{const o=V7.offers.cop;v.items.push({label:o.title.replace('COP FAVOR: ',''),right:'+'+(GW7.gain[o.kind]||6)+' GW',rcol:'#8cf',col:'#4a8cff',sub:'Cop favor'+J+'$'+({ticket:60,stolen:200,snitch:150}[o.kind])+(o.kind==='snitch'?J+GANG7_BY[o.gang].short:''),sub2:o.kind==='snitch'?'-15 '+GANG7_BY[o.gang].short+' respect':'Select to accept',act:()=>r7Accept(o)});
+    for(const g of GANGS7){const o2=V7.offers.gangs[g.id],r=R.g[g.id],war=r<=-40,rv=GANG7_BY[g.rival];
+      v.items.push({label:o2.kind==='deliver'?'Deliver a package':'Hit a lieutenant',right:war?'AT WAR':'+15 RESP',rcol:war?'#f66':'#9f9',col:war?null:g.col,dis:war,
+        sub:g.name+J+'$350',sub2:war?'Won\'t work with you':'-10 '+rv.short+J+'-'+GW7.loss.gangJob+' goodwill',act:()=>war?msg(g.name.toUpperCase()+' WON\'T WORK WITH YOU','#f88',2):r7Accept(o2)});}}
+  if(!TOUCHUI)v.foot.push('Gang names are placeholders.','Good deeds raise goodwill.','Killing, hurting cops or crimes','cops see lower it.');return v;}
+phoneView=(o=>function(){if(phone.app==='standing')return r7View();return o();})(phoneView);
+// ---------------------------------------------------------------- reset + debug
+startGame=(o=>function(){V7.task=null;V7.offers=null;V7.offerT=30;V7.turf=null;V7.lastCaught=0;V7.cd={};for(const k in V7.stats)V7.stats[k]=0;const r=o.apply(this,arguments);V7.lastCaught=typeof EV!=='undefined'?EV.stats.caught:0;return r;})(startGame);
+window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get rep(){return{V7,GW7,GANGS7,GRT7,RP,gwAdd,gAdd,gwTier,gwName,gTier,turf7,noShoot7,r7MakeOffers,r7Accept,r7Done,r7Cancel,r7View,r7GangMember,gwPerks};}}));
 
 </script></body></html>
