@@ -2849,7 +2849,7 @@ function startCrash(a,b,forced){if(EV.off)return null;const ns=EV.jobs.filter(j=
   const ninj=R()<.7?1:(R()<.5?2:0);for(let i=0;i<ninj;i++){const s=walkSpot(x,y,18,40);if(!s)continue;const p=makePed(s.x,s.y,false);p.inj=true;p.down=1e4;p.a=R()*TAU;p.state='wander';peds.push(p);job.patients.push(p);}
   EV.stats.accidents++;if(forced)EV.stats.forced++;else EV.stats.natural++;{const w=[a,b].some(k=>k.ai&&k.ai.turn&&k.ai.turn.wide)?'wide':[a,b].some(k=>k.ai&&k.ai.turn)?'turn':'other';EV.stats['c_'+w]=(EV.stats['c_'+w]||0)+1;}
   const u=dispatchCop(job);if(job.patients.length)dispatchAmb(job);
-  notify('CRASH IN '+distName(x,y)+(u?' \u2014 UNITS RESPONDING':'')+(job.amb?', AMBULANCE EN ROUTE':''),'news',1);
+  notify('CRASH IN '+distName(x,y)+(job.amb?' \u2014 AMBULANCE EN ROUTE':''),'news',1);
   EV.jobs.push(job);return job;}
 // NPC-vs-NPC impact detector
 carCar=(o=>function(a,c){const dx=c.x-a.x,dy=c.y-a.y,lim=(a.L+c.L)/2;if(dx*dx+dy*dy>lim*lim)return;const ax=a.vx,ay=a.vy,cx=c.vx,cy=c.vy;o(a,c);
@@ -2880,7 +2880,7 @@ function endJob(job){if(job.done)return;job.done=true;
 function tickJob(job,dt){job.t+=dt;
   job.units=job.units.filter(c=>{if(liveCar(c)&&c.ai.job===job)return true;if(c===job.amb)job.ambGone=true;return false;});
   job.crew=job.crew.filter(p=>livePed(p)&&(p.off||p.medic));
-  if(job.kind==='crash'){const enr=job.units.some(u=>u.ai.mode==='respond'&&u.type==='police');if(!job.done&&(job.t>70||(job.t>job.dur&&!(enr&&job.t<60)&&(!job.amb||job.ambGone||job.ambDone)))) endJob(job);
+  if(job.kind==='crash'){const enr=job.units.some(u=>u.ai.mode==='respond'&&u.type==='police')||!!job.pend||!!(job.call&&job.call.ph==='calling'),cap=(job.pend||enr)?100:70;if(!job.done&&(job.t>cap||(job.t>job.dur&&!(enr&&job.t<95)&&(!job.amb||job.ambGone||job.ambDone)))) endJob(job);
     if(job.cars.every(c=>!cars.includes(c))&&!job.done)endJob(job);}
   else if(job.kind==='med'){if(!job.done&&(job.t>50||job.ambGone||job.ambDone))endJob(job);}
   else if(job.kind==='mug')tickMug(job,dt);
@@ -2894,7 +2894,7 @@ function tickMug(job,dt){const m=job.mugger,v=job.victim;job.ph+=dt;
   if(m.dead){if(!job.over){job.over=true;job.ph=0;}if(job.ph>4||!job.units.length)endJob(job);return;}
   if(job.phase==='approach'){if(!livePed(v)||v.state==='flee'||v.down>0||job.ph>14){job.phase='abort';m.kind='ped';m.mug=null;if(v)v.mugV=null;endJob(job);return;}}
   if(job.phase==='flee'){job.x=m.x;job.y=m.y;
-    if(!job.reported&&job.ph>1.8){job.reported=true;if(R()<.9){EV.stats.mugReported++;const u=dispatchCop(job);notify('MUGGING REPORTED IN '+distName(m.x,m.y)+(u?' \u2014 UNIT RESPONDING':''),'cops',1);}}
+    if(!job.reported&&job.ph>1.8){job.reported=true;if(R()<.9){EV.stats.mugReported++;dispatchCop(job);}}
     if(!job.cuffed&&!job.caught&&(job.ph>55||Math.hypot(m.x-focus.x,m.y-focus.y)>1400)){m.kind='ped';m.mug=null;m.state='wander';endJob(job);}}
   if(job.cuffed){job.cuffT=(job.cuffT||0)+dt;if(job.cuffT>2.5)endJob(job);}}
 function tickIncidents(dt){if(!V4READY)return;
@@ -2915,7 +2915,7 @@ function unitUpdate(c,dt,o){const ai=c.ai,job=ai.job;
     const d=Math.hypot(dest.x-c.x,dest.y-c.y);
     ai.slowT=Math.hypot(c.vx,c.vy)<15?(ai.slowT||0)+dt:0;
     if(d<(job.kind==='mug'?125:85)||(d<260&&((ai.still||0)>2.5||ai.slowT>1.5))||(job.kind==='mug'&&(d<330||(d<420&&ai.respT>14)))){ai.mode='onscene';ai.arrT=0;if(ai.amb)EV.stats.ambArrive++;else EV.stats.copArrive++;}
-    else{if(ai.respT>22&&!inView(c.x,c.y,80)&&!inView(dest.x,dest.y,80)){const sp=laneSpot(dest.x,dest.y,70,170,true,true);if(sp){c.x=sp.x;c.y=sp.y;c.a=sp.dir*PI/2;c.vx=c.vy=0;ai.dir=sp.dir;prepUnit(c);ai.respT=20;}}
+    else{if(ai.respT>22&&d>650&&!inView(c.x,c.y,80)){const sp=laneSpot(dest.x,dest.y,380,520,true,true);if(sp&&!inView(sp.x,sp.y,40)){c.x=sp.x;c.y=sp.y;c.a=sp.dir*PI/2;c.vx=c.vy=0;ai.dir=sp.dir;prepUnit(c);ai.respT=10;EV.stats.rerouted=(EV.stats.rerouted||0)+1;}}
       const dv=c.driver;ai.mode='traffic';c.driver='ai';o(c,dt);c.driver=dv;if(c.ai){c.ai.mode='respond';if(d<240&&c.vf>45+d*.4)c.th=-1;}return;}}
   if(ai.mode==='onscene'){ai.arrT+=dt;o(c,dt);if(!c.ai)return;
     if(!ai.crewOut&&(Math.hypot(c.vx,c.vy)<12||ai.arrT>3)){ai.crewOut=true;const f=Math.cos(c.a),s=Math.sin(c.a);
@@ -3358,5 +3358,146 @@ evReset=(o=>function(){o();w4ResetStalls();})(evReset);
 if(window.__game&&window.__game.ev)window.__game.ev.reset=evReset;
 window.__game.tow={W4,reset:()=>w4ResetStalls(),stream:w4Stream,startScene:w4StartScene,tickScene:w4TickScene,towAction:w4TowAction,hookTarget:w4HookTarget,attach:w4Attach,release:w4Release,
   drop:w4Drop,makeTow:w4MakeTow,haul:w4Haul,toTow:w4ToTow,pullOut:w4PullOut,startLeave:w4StartLeave,tryLeave:w4TryLeave,tryPark:w4TryPark,gaps:w4Gaps,stripAt:w4StripAt,hitch:w4Hitch,free:w4Free,trySceneAuto:w4TrySceneAuto};
+
+
+// ======================================================================
+//  v4al: car alarms on parked cars + realistic police response.
+//  Witness calls go through 911: only a nearby, free unit responds fast;
+//  otherwise a response timer runs and a car drives in from off-screen.
+// ======================================================================
+const ALCFG={p:.3,durMin:15,durMax:20,away:250,callP:.55,thiefMin:85,thiefMax:150,fastR:480,etaMin:20,etaMax:60};
+const AL={stats:{rolled:0,alarmed:0,trips:0,byPlayer:0,byNpc:0,ended:0,timeout:0,drove:0,calls:0,thief:0,thiefDrove:0,thiefFled:0,fast:0,delayed:0,diverted:0,spawned:0,arrived:0,mugEscaped:0,pcalls:0,gates:0,uturns:0},
+  log:[],thiefT:60,rollT:0,gate:null,pq:[],defer:false,spawnLog:[]};
+const alOkType=c=>c&&!c.wreck&&c.type!=='police'&&c.type!=='ambulance'&&c.type!=='tow'&&c.type!=='bus'&&c.type!=='tank';
+function alRoll(c){if(c.alarmR!==undefined||!alOkType(c)||c.everPlayer||c.driver)return;if(!(c.rest||c.lotCar))return;c.alarmR=1;c.alarm=R()<ALCFG.p;AL.stats.rolled++;if(c.alarm)AL.stats.alarmed++;}
+spawnParked=(o=>function(r0,r1){const n=cars.length;o(r0,r1);if(cars.length>n){const c=cars[cars.length-1];c.lotCar=true;alRoll(c);}})(spawnParked);
+// ---------------------------------------------------------------- tripping
+function alTrip(c,cause){if(!c||c.wreck||c.towed)return false;alRoll(c);if(!c.alarm||c.alarmOn||(c.alarmCd>0))return false;
+  c.alarmOn={t:0,dur:rr(ALCFG.durMin,ALCFG.durMax),x0:c.x,y0:c.y,cause:cause||'npc',callT:rr(2,4),called:false,snd:0,t0:gtime};AL.stats.trips++;if(cause==='player')AL.stats.byPlayer++;else AL.stats.byNpc++;
+  // bystanders turn to look; anyone right next to it jumps back
+  for(const p of peds){if(p.dead||p.cop||p.off||p.medic||p.goCar||(p.kind&&p.kind!=='ped'))continue;const d=Math.hypot(p.x-c.x,p.y-c.y);if(d>170||!los(p.x,p.y,c.x,c.y))continue;
+    if(d<45&&R()<.5){p.state='flee';p.fx=c.x;p.fy=c.y;p.t=rr(1.5,3);}else if(p.state==='wander'){p.stareT=rr(1.5,3.5);p.stareAt=c;}}
+  return true;}
+function alStop(c,why){if(!c.alarmOn)return;c.alarmOn=null;c.alarmCd=8;AL.stats.ended++;if(why==='timeout')AL.stats.timeout++;else if(why==='drove')AL.stats.drove++;}
+damageCar=(o=>function(c,amt,byPlayer){const was=!c.wreck&&!c.driver&&amt>=1.5;o(c,amt,byPlayer);if(was&&state==='play')alTrip(c,byPlayer?'player':'npc');})(damageCar);
+tryEnter=(o=>function(){let best=null,bd=14;if(!player.inCar)for(const c of cars){if(c.wreck)continue;const d=carDist(c,player.x,player.y);if(d<bd){bd=d;best=c;}}
+  const parked=best&&!best.driver&&!best.everPlayer;if(parked)alRoll(best);o();if(parked&&player.inCar===best)alTrip(best,'player');})(tryEnter);
+// ---------------------------------------------------------------- 911 calls + dispatch
+const AL_LBL={mug:'MUGGING',crash:'CRASH',alarm:'CAR ALARM',theft:'CAR THEFT'};
+function alWitness(x,y,r,not){let best=null,bd=r;for(const p of peds){if(p.dead||p.cop||p.off||p.medic||p===not||p.goCar||p.mugHeld||(p.kind&&p.kind!=='ped')||p.down>0||p.inj)continue;const d=Math.hypot(p.x-x,p.y-y);if(d<bd&&los(p.x,p.y,x,y)){bd=d;best=p;}}return best;}
+function alCallIn(job,label){if(job.call)return;const w=alWitness(job.x,job.y,260,job.kind==='mug'?job.mugger:null);
+  job.call={t0:gtime,ph:'calling',t:0,dur:rr(3,5.5),label:label||AL_LBL[job.kind]||'INCIDENT',w};if(w)w.calling=job.call.dur+.5;AL.stats.calls++;
+  notify(job.call.label+' IN '+distName(job.x,job.y)+' \u2014 WITNESS CALLING 911\u2026','cops',1);}
+const alFree=c=>c.driver==='cop'&&c.type==='police'&&c.ai&&!c.ai.job&&!c.deployed&&!c.wreck&&c.ai.mode==='traffic';
+function alNearFree(x,y,r){let best=null,bd=r;for(const c of cars){if(!alFree(c))continue;const d=Math.hypot(c.x-x,c.y-y);if(d<bd){bd=d;best=c;}}return best?{c:best,d:bd}:null;}
+function alBusy(){let n=0;for(const c of cars)if(c.type==='police'&&c.ai&&(c.ai.job||c.ai.mode==='chase'))n++;return n;}
+function alEta(x,y){let dC=1400;for(const c of cars)if(c.type==='police'&&!c.wreck&&c.driver==='cop')dC=Math.min(dC,Math.hypot(c.x-x,c.y-y));
+  return Math.round(clamp(16+dC/50+alBusy()*5+rr(0,8),ALCFG.etaMin,ALCFG.etaMax));}
+// a nearby unit pointed the wrong way on a two-way street swings a U-turn instead of looping the block
+function alUturnPlan(c,job){const ai=c.ai;if(!ai||!ai.L||ai.dir===undefined)return null;const d=ai.dir,L=ai.L,nd=(d+2)%4,dx=job.x-c.x,dy=job.y-c.y,dd=Math.hypot(dx,dy)||1;
+  if((DX[d]*dx+DY[d]*dy)/dd>-.3||!L.lanes[nd]||!L.lanes[nd].length)return null;const k=Math.floor(c.y/T)*N+Math.floor(c.x/T);if(NODEAT[k]>=0)return null;
+  const v=isV(d),p0=v?c.x:c.y,p1=laneXY(L,innerLane(L,nd));if(Math.abs(p1-p0)<8||Math.abs(p1-p0)>90)return null;return{t:0,nd,p0,p1,s0:v?c.y:c.x,v,sg:sgn(d),th:0,ph:'brake'};}
+function alUturn(c,dt){const U=c.ai.uturn;U.t+=dt;const sp=Math.hypot(c.vx,c.vy);
+  if(U.ph==='brake'){const k=Math.max(0,1-dt*5);c.vx*=k;c.vy*=k;c.x+=c.vx*dt;c.y+=c.vy*dt;c.av=0;if(sp<30||U.t>1.2){U.ph='turn';U.s0=U.v?c.y:c.x;U.p0=U.v?c.x:c.y;}return;}
+  const r=Math.abs(U.p1-U.p0)/2,pc=(U.p0+U.p1)/2,w=50/Math.max(8,r*1.25);U.th=Math.min(Math.PI,U.th+w*dt);const lat=pc+(U.p0-pc)*Math.cos(U.th),lon=U.s0+U.sg*r*1.25*Math.sin(U.th);
+  const ox=c.x,oy=c.y;if(U.v){c.x=lat;c.y=lon;}else{c.x=lon;c.y=lat;}c.vx=(c.x-ox)/dt;c.vy=(c.y-oy)/dt;if(Math.hypot(c.vx,c.vy)>1)c.a=Math.atan2(c.vy,c.vx);c.av=0;c.vf=Math.hypot(c.vx,c.vy);
+  if(U.th>=Math.PI-1e-3||U.t>4){c.a=U.nd*PI/2;c.ai.uturn=null;prepUnit(c);AL.stats.uturns=(AL.stats.uturns||0)+1;}}
+function alAssign(job,c){const ut=c.ai&&c.ai.mode==='traffic'?alUturnPlan(c,job):null;prepUnit(c);c.ai.uturn=ut;c.ai.cruise=Math.max(c.ai.cruise||0,rr(132,152));c.ai.mode='respond';c.ai.job=job;c.ai.dest={x:job.x,y:job.y};c.ai.respT=0;c.ai.panic=1;job.units.push(c);job.lastDisp=job.t;EV.stats.dispatched++;return c;}
+function alDispatch(job){if(stars>=4||state!=='play'||job.done)return null;const nf=alNearFree(job.x,job.y,ALCFG.fastR);
+  if(nf){const ut=alUturnPlan(nf.c,job),eta=Math.max(3,Math.round((Math.abs(job.x-nf.c.x)+Math.abs(job.y-nf.c.y))/110+2+(ut?2:0)));job.call.fast=true;job.call.eta=eta;AL.stats.fast++;notify('UNIT NEARBY RESPONDING (ETA ~'+eta+'s)','cops',1);return alAssign(job,nf.c);}
+  const eta=alEta(job.x,job.y);job.pend={t:0,eta,spawnAt:Math.max(4,eta-7)};job.call.fast=false;job.call.eta=eta;AL.stats.delayed++;
+  notify('UNITS DISPATCHED (ETA ~'+eta+'s)','cops',1);return null;}
+dispatchCop=(o=>function(job){if(stars>=4||state!=='play')return null;if(!job.call){alCallIn(job);return null;}
+  if(job.call.ph==='calling'||job.pend)return null;return alDispatch(job);})(dispatchCop);
+function alSpawnUnit(job){const P=job.pend;let sp=null;
+  for(let k=0;k<3&&!sp;k++){const s=(job.kind!=='mug'&&upstreamSpot(job.x,job.y,300,520))||laneSpot(job.x,job.y,320+k*120,560+k*160,true,true);if(s&&!inView(s.x,s.y,40))sp=s;}
+  if(!sp)return null;const u=makeUnit('police',sp);alAssign(job,u);AL.stats.spawned++;AL.spawnLog.push({d:Math.round(Math.hypot(sp.x-job.x,sp.y-job.y)),t:+P.t.toFixed(1)});if(AL.spawnLog.length>40)AL.spawnLog.shift();return u;}
+function alTickJobs(dt){for(const job of EV.jobs){const C=job.call;
+    if(C&&C.ph==='calling'){C.t+=dt;if(C.t>=C.dur){C.ph='done';if(!job.done){if(job.playerHeat){const v=job.playerHeat;job.playerHeat=0;alPlayerHeat(v,job);}alDispatch(job);}}}
+    if(job.pend){const P=job.pend;P.t+=dt;
+      if(job.done){if(job.kind==='mug'&&!job.caught&&!job.cuffed){AL.stats.mugEscaped++;notify('THE MUGGER GOT AWAY BEFORE POLICE ARRIVED','news',0);}job.pend=null;continue;}
+      if(stars<4){P.chk=(P.chk||0)-dt;if(P.chk<=0){P.chk=1;const nf=alNearFree(job.x,job.y,ALCFG.fastR*.8);if(nf){alAssign(job,nf.c);AL.stats.diverted++;if(job.call)job.call.div=true;job.pend=null;continue;}}
+        if(P.t>=P.spawnAt&&alSpawnUnit(job))job.pend=null;}}
+    if(C&&C.arr===undefined&&job.units.some(u=>u.type==='police'&&u.ai&&u.ai.mode==='onscene')){C.arr=+(gtime-C.t0).toFixed(1);AL.stats.arrived++;
+      AL.log.push({kind:job.kind,fast:!!C.fast,div:!!C.div,eta:C.eta,arr:C.arr});if(AL.log.length>60)AL.log.shift();
+      notify('POLICE ARRIVED IN '+distName(job.x,job.y)+(C.fast?'':' ('+Math.round(C.arr)+'s AFTER THE CALL)'),'cops',0);
+      if(job.kind==='alarm'||job.kind==='theft'){const tg=player.inCar||player,ac=job.car;if(player.active&&ac&&player.inCar===ac&&Math.hypot(tg.x-job.x,tg.y-job.y)<320)addHeat(45);}}
+    if((job.kind==='alarm'||job.kind==='theft')&&!job.done){const on=job.units.some(u=>u.ai&&u.ai.mode==='onscene');if(on){job.onT=(job.onT||0)+dt;if(job.onT>9)endJob(job);}
+      else if(!job.pend&&!(C&&C.ph==='calling')&&!job.units.length&&job.t>6)endJob(job);if(job.t>120)endJob(job);}}}
+// ---------------------------------------------------------------- player crimes reported by witnesses
+function alPlayerHeat(v,job){const s0=Math.max(stars,calcStars());AL.defer=false;addHeat(v);const ns=calcStars();if(ns<1||ns>2||s0>=1)return;const tg=player.inCar||player;
+  const nf=alNearFree(tg.x,tg.y,ALCFG.fastR);if(nf)return;const eta=job&&job.call&&job.call.eta||alEta(tg.x,tg.y);AL.gate={t0:gtime,eta};AL.stats.gates++;}
+function alPlayerCall(v,label,x,y){AL.pq.push({v,t:0,dur:rr(3,5),label,x,y});AL.stats.pcalls++;const w=alWitness(x,y,260);if(w)w.calling=5;
+  notify(label+' IN '+distName(x,y)+' \u2014 WITNESS CALLING 911\u2026','cops',1);}
+function alTickPlayer(dt){for(const q of AL.pq.slice()){q.t+=dt;if(q.t<q.dur)continue;AL.pq.splice(AL.pq.indexOf(q),1);if(state!=='play')continue;const s0=Math.max(stars,calcStars());alPlayerHeat(q.v,null);
+    if(s0<1&&calcStars()>=1){const tg=player.inCar||player,nf=alNearFree(tg.x,tg.y,ALCFG.fastR);if(nf)notify('UNIT NEARBY RESPONDING (ETA ~'+Math.max(3,Math.round(nf.d/115+2))+'s)','cops',1);else if(AL.gate)notify('UNITS DISPATCHED (ETA ~'+AL.gate.eta+'s)','cops',1);}}
+  if(AL.gate){const cs=Math.max(stars,calcStars());if(cs<1||cs>=3||gtime-AL.gate.t0>AL.gate.eta)AL.gate=null;}}
+addHeat=(o=>function(v){if(AL.defer&&v>0&&state==='play'){const tg=player.inCar||player;alPlayerCall(v,AL.deferLbl||'CRIME',tg.x,tg.y);return;}o(v);})(addHeat);
+mugPed=(o=>function(q){const cw=copWitness(q.x,q.y);AL.defer=!cw;AL.deferLbl='MUGGING';const m0=msg;msg=(t,c,d)=>{if(AL.defer&&/WITNESS CALLED/.test(t))return;m0(t,c,d);};
+  try{o(q);}finally{AL.defer=false;msg=m0;}})(mugPed);
+// low heat: no fresh cruisers until the dispatched unit's ETA is (nearly) up
+manage=(o=>function(){const G=AL.gate;if(G&&stars>=1&&stars<=2&&gtime-G.t0<G.eta-4){const k=stars,v=MAXCOPS[k];MAXCOPS[k]=0;try{o();}finally{MAXCOPS[k]=v;}}else o();})(manage);
+// ---------------------------------------------------------------- NPC car thieves
+function alStartThief(force,wantAlarm){const vr=Math.hypot(LW,LH)/2/S;const cand=[];
+  for(const c of cars){if(!c.rest||!c.curb||c.curb.kind!=='curb'||!w4LeaveOk(c))continue;const d=Math.hypot(c.x-focus.x,c.y-focus.y);if(d>vr+60||d<40)continue;alRoll(c);cand.push(c);}
+  if(!cand.length)return null;const al=cand.filter(c=>c.alarm);const pool=(wantAlarm===true||(wantAlarm!==false&&R()<.7))&&al.length?al:cand;const c=pick(pool);
+  const SS=c.curb.strip,v=SS.ax==='v',side=w4SideOf(c);let ped=null;
+  for(const k of R()<.5?[1,-1]:[-1,1])for(const dd of[130,105,85]){const al2=(v?c.y:c.x)+k*dd,pp=SS.curb+SS.s*25,x=v?pp:al2,y=v?al2:pp;if(tileW(x,y)!==SIDE||(!force&&inView(x,y,10)))continue;ped=makePed(x,y,false);break;}
+  if(!ped)return null;ped.thief=true;ped.kind='thief';ped.brave=false;ped.outfit={top:{t:'hoodie',c:pick(['#1e1e1e','#33333d','#3a2a2a'])},pants:{t:'jeans',c:'#1a1a24'},shoes:{t:'sneakers',c:'#111'},hat:{t:'beanie',c:'#151515'},glasses:null,hair:{t:'buzz',c:'#111'}};
+  peds.push(ped);ped.goCar={c,side,t:0,et:-1};c.leaving=ped;AL.stats.thief++;return ped;}
+w4PedToCar=(o=>function(p,dt){const g2=p.goCar;if(!p.thief||!g2||g2.et<0)return o(p,dt);const c=g2.c;
+  if(!cars.includes(c)||c.leaving!==p||p.state==='flee'){return o(p,dt);}
+  g2.jt=(g2.jt||0)+dt;p.a=Math.atan2(c.y-p.y,c.x-p.x);p.swingT=.08;
+  if(!g2.tripped){g2.tripped=true;if(alTrip(c,'npc')){c.alarmOn.thief=true;if(R()<.55){g2.flee=true;}}}
+  if(g2.flee&&g2.jt>.5){p.goCar=null;c.leaving=null;p.state='flee';p.fx=c.x;p.fy=c.y;p.t=8;p.kind='ped';p.thief=false;AL.stats.thiefFled++;return false;}
+  if(g2.jt<1.8){g2.et=0;c.doorT=0;return true;}
+  const r=o(p,dt);if(p._rm){AL.stats.thiefDrove++;c.stolenNpc=true;}return r;})(w4PedToCar);
+// ---------------------------------------------------------------- per-frame
+function alTickCars(dt){AL.rollT-=dt;const roll=AL.rollT<=0;if(roll)AL.rollT=.5;
+  for(const c of cars){if(roll&&c.alarmR===undefined&&!c.driver)alRoll(c);if(c.alarmCd>0)c.alarmCd-=dt;const A=c.alarmOn;if(!A)continue;A.t+=dt;
+    if(c.wreck){alStop(c,'wreck');continue;}if(A.t>A.dur){alStop(c,'timeout');continue;}if(Math.hypot(c.x-A.x0,c.y-A.y0)>ALCFG.away){alStop(c,'drove');continue;}
+    // sound: two-tone whoop, distance attenuated
+    A.snd-=dt;if(A.snd<=0){A.snd=.42;A.ph=!A.ph;if(typeof AC!=='undefined'&&AC&&!muted){const at=clamp(1-Math.hypot(c.x-focus.x,c.y-focus.y)/700,0,1);if(at>.02)sTone(A.ph?1180:820,A.ph?820:1180,.36,.05*at,'square');}}
+    // a witness may call it in
+    if(!A.called&&A.t>A.callT&&state==='play'&&!interior){A.called=true;const w=alWitness(c.x,c.y,230,c.leaving);
+      if(w&&R()<ALCFG.callP&&!EV.jobs.some(j=>(j.kind==='alarm'||j.kind==='theft')&&!j.done&&Math.hypot(j.x-c.x,j.y-c.y)<300)){
+        const kind=A.thief||c.stolenNpc?'theft':'alarm';const job={id:EV.nid++,kind,x:c.x,y:c.y,t:0,dur:40,units:[],crew:[],patients:[],cars:[],done:false,reported:true,car:c};EV.jobs.push(job);
+        // heat only if the witness actually saw the player at it, or a cop is close by
+        if(A.cause==='player'&&player.active){const tg=player.inCar||player;const seen=Math.hypot(w.x-tg.x,w.y-tg.y)<260&&los(w.x,w.y,tg.x,tg.y);
+          const copNear=copWitness(c.x,c.y)||cars.some(k=>k.type==='police'&&k.driver==='cop'&&!k.wreck&&Math.hypot(k.x-c.x,k.y-c.y)<300);
+          if(copNear&&R()<.6){addHeat(45);msg('A COP HEARD THE ALARM!','#f88',2);}else if(seen&&R()<.4)job.playerHeat=45;}
+        alCallIn(job,kind==='theft'?'CAR THEFT':'CAR ALARM');w.calling=job.call.dur+.5;}}}}
+updatePed=(o=>function(p,dt){if(p.calling>0)p.calling-=dt;
+  if(p.stareT>0&&!p.dead&&p.state==='wander'&&!p.goCar&&!p.job){p.stareT-=dt;const c=p.stareAt;if(c&&cars.includes(c))p.a+=angDiff(Math.atan2(c.y-p.y,c.x-p.x),p.a)*Math.min(1,dt*6);return;}
+  return o(p,dt);})(updatePed);
+updateWorld=(o=>function(dt){o(dt);if(!V4READY)return;alTickCars(dt);alTickJobs(dt);alTickPlayer(dt);
+  if(state==='play'&&!interior&&!EV.off&&!AL.off){AL.thiefT-=dt;if(AL.thiefT<=0)AL.thiefT=alStartThief()?rr(ALCFG.thiefMin,ALCFG.thiefMax):8;}})(updateWorld);
+// ---------------------------------------------------------------- drawing
+drawCar=(o=>function(c){o(c);const A=c.alarmOn;if(!A||c.wreck)return;const f=Math.floor(gtime*5)%2;g.save();g.translate(c.x,c.y);g.rotate(c.a);const hl=c.L/2,hw=c.W/2;
+  g.fillStyle=f?'#ffb020':'#5a3a00';for(const [x,y] of[[hl-2.5,-hw],[hl-2.5,hw-2.5],[-hl,-hw],[-hl,hw-2.5]])g.fillRect(x,y,2.8,2.8);
+  if(f){g.globalAlpha=.32;g.fillStyle='#fff6c0';for(const s of[-1,1]){g.beginPath();g.moveTo(hl,s*(hw-3));g.lineTo(hl+30,s*(hw-3)-9);g.lineTo(hl+30,s*(hw-3)+9);g.closePath();g.fill();}
+    g.globalAlpha=.2;g.fillStyle='#ffb020';g.beginPath();g.arc(0,0,c.L*.62,0,TAU);g.fill();}
+  g.restore();g.save();const b=Math.sin(gtime*9)*1.5;g.font='bold 7px '+FONT;g.textAlign='center';g.lineWidth=2;g.strokeStyle='#000';const tx=Math.floor(gtime*2.4)%2?'WEE-OO':'WOO-EE';
+  g.strokeText(tx,c.x,c.y-c.L*.55-4+b);g.fillStyle=f?'#ff3030':'#ffd040';g.fillText(tx,c.x,c.y-c.L*.55-4+b);g.restore();})(drawCar);
+// ---------------------------------------------------------------- responder routing: shortest legal route (one-ways respected), not greedy
+let AL_DADJ=null;const AL_DC=new Map();
+function alNb(nd,o2){for(const v of NADJ[nd.id]){const m=NODES[v],dx=m.cx-nd.cx,dy=m.cy-nd.cy;if((o2===0&&dx>0&&Math.abs(dy)<4)||(o2===2&&dx<0&&Math.abs(dy)<4)||(o2===1&&dy>0&&Math.abs(dx)<4)||(o2===3&&dy<0&&Math.abs(dx)<4))return m;}return null;}
+function alDist(tid){let D=AL_DC.get(tid);if(D)return D;if(!AL_DADJ){AL_DADJ=NODES.map(()=>[]);for(const nd of NODES)for(let o2=0;o2<4;o2++){if(!canGo(nd,o2))continue;const m=alNb(nd,o2);if(m)AL_DADJ[m.id].push(nd.id);}}
+  D=new Int16Array(NODES.length).fill(999);D[tid]=0;const q=[tid];while(q.length){const u=q.shift();for(const v of AL_DADJ[u])if(D[v]>D[u]+1){D[v]=D[u]+1;q.push(v);}}
+  if(AL_DC.size>24)AL_DC.clear();AL_DC.set(tid,D);return D;}
+planAt=(o=>function(c,nd){const ai=c.ai;if(!ai||!ai.dest||!ai.job)return o(c,nd);let tn;try{tn=nearestNode(ai.dest.x,ai.dest.y);}catch(e){tn=null;}if(!tn||tn.id===nd.id)return o(c,nd);
+  const D=alDist(tn.id),d=ai.dir;let best=null,bs=1e9;
+  for(const o2 of[d,RIGHT(d),LEFT(d)]){if(!canGo(nd,o2))continue;const m=alNb(nd,o2);const sc=(m?D[m.id]:999)*1000+(m?Math.hypot(m.cx-ai.dest.x,m.cy-ai.dest.y)*.1:500)+(o2===d?-20:0);if(sc<bs){bs=sc;best=o2;}}
+  if(best===null||bs>=999000)return o(c,nd);const L2=isV(best)?nd.V:nd.H;if(!L2||!L2.lanes[best])return o(c,nd);
+  const lo=best===d?(L2.lanes[best].includes(ai.lo)?ai.lo:outerLane(L2,best)):best===LEFT(d)?innerLane(L2,best):outerLane(L2,best);return{id:nd.id,dir:best,L:L2,lo};})(planAt);
+// ---------------------------------------------------------------- reset + debug
+evReset=(o=>function(){o();for(const k in AL.stats)AL.stats[k]=0;AL.log=[];AL.spawnLog=[];AL.thiefT=rr(45,80);AL.gate=null;AL.pq=[];AL.defer=false;for(const c of cars)c.alarmOn=null;})(evReset);
+window.__game.ev.reset=evReset;
+window.__game.al={AL,ALCFG,roll:alRoll,trip:alTrip,stop:alStop,callIn:alCallIn,dispatch:alDispatch,eta:alEta,nearFree:alNearFree,thief:alStartThief,playerCall:alPlayerCall};
+window.__game.ev.dispatchCop=dispatchCop;
+// responders park up once they are close enough to see the scene (alarm calls have no wreck to drive up to)
+unitUpdate=(o=>function(c,dt,o2){const ai=c.ai,job=ai&&ai.job;if(ai&&ai.uturn){alUturn(c,dt);return;}if(job&&ai.mode==='respond'&&!job.done&&job.kind!=='mug'){const d=Math.hypot(job.x-c.x,job.y-c.y);
+    if((d<(job.kind==='alarm'||job.kind==='theft'?190:110)&&(ai.respT||0)>1)||((ai.respT||0)>35&&d<320)){ai.mode='onscene';ai.arrT=0;if(ai.amb)EV.stats.ambArrive++;else EV.stats.copArrive++;}}
+  return o(c,dt,o2);})(unitUpdate);
 
 </script></body></html>
