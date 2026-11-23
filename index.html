@@ -3015,9 +3015,9 @@ window.__game.ev={EV,reset:evReset,EVCFG,startCrash,startMug,startMed,triggerCar
 // ======================================================================
 CAR_TYPES.tow={L:40,W:17,max:280,acc:210,hp:180,m:1.8,name:'TOW TRUCK'};CAR_VALUE.tow=800;
 const TOW_COLS=['#e8b020','#d03a20','#f0f0f0','#2a5ab0','#2a8a4a','#e8b020'];
-const W4={stalls:[],strips:[],stripT:null,hyd:[],gas:[],ready:false,first:true,streamT:0,towT:28,pullT:14,scene:null,hookCand:null,prevCar:null,lastPlayerCar:null,leftT:0,
+const W4={stalls:[],strips:[],stripT:null,hyd:[],gas:[],ready:false,first:true,streamT:0,towT:28,pullT:14,parkT:20,scene:null,hookCand:null,prevCar:null,lastPlayerCar:null,leftT:0,
   FILL:.5,TOWP:.1,HAULP:.35,CH:.062,off:false,
-  stats:{curb:0,towSpawn:0,haulSpawn:0,scenes:0,hooked:0,aborted:0,snatch:0,pull:0,playerHook:0,playerDrop:0,chop:0,impound:0,hydrant:0}};
+  stats:{curb:0,towSpawn:0,haulSpawn:0,scenes:0,hooked:0,aborted:0,snatch:0,pull:0,pullDone:0,pullTO:0,leave:0,leaveIn:0,leaveAbort:0,park:0,parkDone:0,parkAbort:0,pullBack:0,playerHook:0,playerDrop:0,chop:0,impound:0,hydrant:0}};
 const W4GAS_COL=['#d02828','#2860c8'];
 // ---------------- geometry helpers ----------------
 function w4World(gs,a,b){return[gs.F[0]+gs.n[0]*a+gs.p[0]*b,gs.F[1]+gs.n[1]*a+gs.p[1]*b];}
@@ -3061,7 +3061,7 @@ function w4Strips(){W4.stripT=new Int16Array(N*N).fill(-1);const runs=[];
         const bh=tile(st+s,t);if(bh===LOT||bh===ALLEY||bh===ROAD)return false;
         for(const o of[base,base+1]){if(tile(o,t)!==ROAD||Ab[K(o,t)]!==L.i)return false;for(let d=-1;d<=1;d++)if(NODEAT[K(o,t+d)]>=0)return false;}return true;};
       for(let t=1;t<N;t++){const g2=t<N-1&&ok(t);if(g2&&t0<0)t0=t;else if(!g2&&t0>=0){if(t-t0>=2)runs.push({ax,L,s,curb,st,dir,t0,t1:t,K});t0=-1;}}}}
-  for(const r of runs){const A0=r.t0*T+18,A1=r.t1*T-18,len=A1-A0,n=Math.floor(len/42);if(n<1)continue;const sp=len/n,ri=W4.strips.length;
+  for(const r of runs){const A0=r.t0*T+18,A1=r.t1*T-18,len=A1-A0,n=Math.floor(len/54);if(n<1)continue;const sp=len/n,ri=W4.strips.length;
     const S={ax:r.ax,s:r.s,curb:r.curb,a0:A0,a1:A1,sp,n,dir:r.dir,L:r.L,stalls:[],marks:[],hyd:null,i:ri};
     const per=r.curb+r.s*W4_CC,ang=r.dir*PI/2;
     const hk=hash2(r.curb|0,A0|0),hydK=n>=3&&hk<.45?1+Math.floor(hash2(A0|0,r.curb|0)*(n-2)):-1;
@@ -3120,9 +3120,9 @@ function w4Stream(){if(!W4.ready)return;const vr=Math.hypot(LW,LH)/2/S,R0=vr+70,
     if(dx>R1+40||dy>R1+40){if(st.near){st.near=false;st.occ=R()<W4.FILL;}continue;}
     const d=Math.hypot(dx,dy);
     if(d<R0){if(!st.near){st.near=true;if(st.occ===undefined)st.occ=R()<W4.FILL;}
-      if(st.occ&&(first||!inView(st.x,st.y,40))&&!carNear(st.x,st.y,st.kind==='pump'?16:20))w4Park(st);}
+      if(st.occ&&!st.res&&(first||!inView(st.x,st.y,40))&&!carNear(st.x,st.y,st.kind==='pump'?16:20))w4Park(st);}
     else if(d>R1&&st.near){st.near=false;st.occ=R()<W4.FILL;}}}
-function w4ResetStalls(){for(const st of W4.stalls){st.car=null;st.near=false;st.occ=R()<W4.FILL;}for(const h of W4.hyd)h.broken=0;W4.first=true;W4.scene=null;W4.towT=rr(22,36);W4.pullT=rr(10,18);W4.streamT=0;W4.lastPlayerCar=null;W4.prevCar=null;W4.hookCand=null;}
+function w4ResetStalls(){for(const st of W4.stalls){st.car=null;st.near=false;st.occ=R()<W4.FILL;}for(const h of W4.hyd)h.broken=0;W4.first=true;W4.scene=null;W4.towT=rr(22,36);W4.pullT=rr(8,16);W4.parkT=rr(10,20);W4.streamT=0;W4.lastPlayerCar=null;W4.prevCar=null;W4.hookCand=null;}
 w4ResetStalls();
 // ---------------- tow trucks ----------------
 function w4ToTow(c){const t=CAR_TYPES.tow;c.type='tow';c.L=t.L;c.W=t.W;c.max=t.max;c.acc=t.acc;c.hp=c.maxHp=t.hp;c.m=t.m;c.color=pick(TOW_COLS);c.roof=shade(c.color,1.15);c.dark=shade(c.color,.7);return c;}
@@ -3145,7 +3145,7 @@ spawnTraffic=(o=>function(r0,r1,police){const n=cars.length;o(r0,r1,police);if(W
 function w4Free(x,y,a,L,Wd,ignore){const fx=Math.cos(a),fy=Math.sin(a);for(const [u,v] of[[0,0],[.5,.5],[.5,-.5],[-.5,.5],[-.5,-.5],[.5,0],[-.5,0]]){const px=x+fx*u*L-fy*v*Wd,py=y+fy*u*L+fx*v*Wd;if(solid(tileW(px,py)))return false;}
   for(const o of cars){if(o===ignore)continue;if(Math.abs(o.x-x)<(L+o.L)/2&&Math.abs(o.y-y)<(L+o.L)/2){const lx=(o.x-x)*fx+(o.y-y)*fy,ly=-(o.x-x)*fy+(o.y-y)*fx;if(Math.abs(lx)<L/2+o.L/2-2&&Math.abs(ly)<Wd/2+o.W/2+1)return false;}}return true;}
 // hook-up scene: the truck parks against a car, an operator works on it, then it hauls it off
-function w4StartScene(c,opt){opt=opt||{};if(W4.scene||!c||c.towed||c.driver)return null;const fx=Math.cos(c.a),fy=Math.sin(c.a),TL=CAR_TYPES.tow.L,gap=c.L/2+5+TL/2;
+function w4StartScene(c,opt){opt=opt||{};if(W4.scene||!c||c.towed||c.driver||c.leaving)return null;const fx=Math.cos(c.a),fy=Math.sin(c.a),TL=CAR_TYPES.tow.L,gap=c.L/2+5+TL/2;
   let pos=null;for(const e of(opt.end?[opt.end]:[1,-1])){const x=c.x+fx*gap*e,y=c.y+fy*gap*e,a=e>0?c.a:c.a+PI;if(c.curb&&c.curb.kind==='curb'){const sa=w4StripAt(x,y);if(!sa)continue;}
     if(!opt.force&&inView(x,y,24))continue;if(w4Free(x,y,a,TL,17,c)){pos={x,y,a,e};break;}}
   if(!pos)return null;const t=w4MakeTow(pos.x,pos.y,pos.a,'towhook');
@@ -3168,20 +3168,69 @@ function w4TickScene(dt){const S=W4.scene;if(!S)return;const t=S.truck,c=S.car,p
 function w4TrySceneAuto(){const vr=Math.hypot(LW,LH)/2/S,fx=focus.x,fy=focus.y;
   const pc=W4.lastPlayerCar;
   if(pc&&pc!==player.inCar&&cars.includes(pc)&&!pc.driver&&!pc.wreck&&!pc.towed&&gtime-W4.leftT>25&&Math.hypot(pc.vx,pc.vy)<4){const d=Math.hypot(pc.x-fx,pc.y-fy);if(d>vr+20&&d<1100&&R()<.45&&w4StartScene(pc))return true;}
-  const cand=[];for(const st of W4.stalls){if(st.kind!=='curb'||!st.car||!st.car.rest)continue;const d=Math.hypot(st.x-fx,st.y-fy);if(d>vr*.5&&d<vr+260)cand.push(st.car);}
+  const cand=[];for(const st of W4.stalls){if(st.kind!=='curb'||!st.car||!st.car.rest||st.car.leaving)continue;const d=Math.hypot(st.x-fx,st.y-fy);if(d>vr*.5&&d<vr+260)cand.push(st.car);}
   for(let i=0;i<8&&cand.length;i++){const c=cand.splice(Math.floor(R()*cand.length),1)[0];if(w4StartScene(c))return true;}return false;}
 // car pulling out of a curb space: wait for a gap, then merge into the lane
-function w4PullOut(c){if(c.curb)w4Detach(c);c.rest=false;c.driver='ai';c.ai={mode:'traffic',dir:0,cruise:rr(95,140),blockT:0,panic:0,stuck:0,rev:0,navT:0,nav:null};trafficInit(c);c.ai.pull={wait:0,go:false,t:0};W4.stats.pull++;}
-function w4TryPull(){const vr=Math.hypot(LW,LH)/2/S;let n=0;for(const c of cars)if(c.driver==='ai')n++;if(n>=TRAFFIC+4)return;
-  const cand=[];for(const st of W4.stalls){if(st.kind!=='curb'||!st.car||!st.car.rest)continue;const d=Math.hypot(st.x-focus.x,st.y-focus.y);if(d<vr+150)cand.push(st.car);}
-  for(let i=0;i<6&&cand.length;i++){const c=cand.splice(Math.floor(R()*cand.length),1)[0],fx=Math.cos(c.a),fy=Math.sin(c.a);
-    if(w4Free(c.x+fx*(c.L+14),c.y+fy*(c.L+14),c.a,c.L+6,c.W,c)){w4PullOut(c);return;}}}
+function w4PullOut(c,sig){const st0=c.curb;if(c.curb)w4Detach(c);c.rest=false;c.leaving=null;c.driver='ai';c.ai={mode:'traffic',dir:0,cruise:rr(95,140),blockT:0,panic:0,stuck:0,rev:0,navT:0,nav:null};trafficInit(c);c.ai.pull={wait:0,go:false,t:0,sig:sig===undefined?1.4:sig,st0};W4.stats.pull++;}
+// gaps (px) to the nearest car ahead / behind in the car's own footprint lane
+function w4Gaps(c){const fx=Math.cos(c.a),fy=Math.sin(c.a);let ga=99,gb=99;
+  for(const o of cars){if(o===c||o.towed===c||c.towed===o)continue;const dx=o.x-c.x,dy=o.y-c.y;if(Math.abs(dx)>90||Math.abs(dy)>90)continue;const lx=dx*fx+dy*fy,ly=-dx*fy+dy*fx;
+    if(Math.abs(ly)>(c.W+o.W)/2-2)continue;const g2=Math.abs(lx)-(c.L+o.L)/2;if(lx>0)ga=Math.min(ga,g2);else gb=Math.min(gb,g2);}return[ga,gb];}
 function w4Pull(c,dt){const ai=c.ai,pl=ai.pull;if(!ai.init)trafficInit(c);ai.pull=pl;pl.t+=dt;const L=ai.L,d=ai.dir,lane=laneXY(L,ai.lo),per=isV(d)?c.x:c.y,sg=sgn(d);
-  if(!pl.go){c.th=c.vf>4?-1:0;c.st=0;c.hb=false;pl.wait+=dt;if(laneClear(c,latOf(c,L,ai.lo),150,34)||pl.wait>7)pl.go=true;return;}
-  const tx=isV(d)?lane:c.x+sg*34,ty=isV(d)?c.y+sg*34:lane,diff=angDiff(Math.atan2(ty-c.y,tx-c.x),c.a);
-  c.st=clamp(diff*3,-1,1);c.th=c.vf<(c.tow?34:44)?1:0;c.hb=false;
-  if((Math.abs(per-lane)<5&&Math.abs(angDiff(c.a,d*PI/2))<.3)||pl.t>9){c._pullEnd=[gtime,+pl.t.toFixed(1),Math.round(per-lane)];ai.pull=null;ai.init=false;}}
-aiTraffic=(o=>function(c,dt){if(c.ai&&c.ai.pull){w4Pull(c,dt);return;}o(c,dt);})(aiTraffic);
+  if(pl.side===undefined)pl.side=Math.sign(latOf(c,L,ai.lo))||-1;
+  if(!pl.go){c.st=0;c.hb=false;if(pl.t>16){const st0=pl.st0;if(st0&&!st0.car&&!st0.res&&Math.hypot(c.x-st0.x,c.y-st0.y)<24){W4.stats.pullBack++;w4ParkDone(c,st0);W4.stats.parkDone--;return;}}
+    if(pl.ph!=='back'){c.th=c.vf>4?-1:0;pl.wait+=dt;
+      if(pl.wait>(pl.sig||0)&&(laneClear(c,latOf(c,L,ai.lo),175,40)||(pl.wait>10&&laneClear(c,latOf(c,L,ai.lo),20,30)))){const g2=c.tow?[99,0]:w4Gaps(c);if(g2[0]<30&&g2[1]>8){pl.ph='back';pl.bx=c.x;pl.by=c.y;pl.bt=0;}else pl.go=true;}}
+    else{pl.bt+=dt;const g2=w4Gaps(c);c.th=c.vf>-12?-1:0;if(g2[1]<6||Math.hypot(c.x-pl.bx,c.y-pl.by)>16||pl.bt>2){pl.go=true;pl.wait=Math.max(pl.wait,pl.sig||0);if(!laneClear(c,latOf(c,L,ai.lo),175,40)){pl.go=false;pl.ph='wait2';}}}
+    return;}
+  const tx=isV(d)?lane:c.x+sg*30,ty=isV(d)?c.y+sg*30:lane,diff=angDiff(Math.atan2(ty-c.y,tx-c.x),c.a),off=Math.abs(per-lane),cap=c.tow?34:off>10?30:46;
+  let cp=cap;const ld=laneAhead(c,40+Math.max(0,c.vf)*.6,off>8?latOf(c,L,ai.lo):0,true);if(ld)cp=Math.min(cp,Math.max(0,(ld.gap-8)*1.8+(ld.sp>0?ld.sp:0)));if(off>10&&cp<2&&c.vf<3){pl.blk=(pl.blk||0)+dt;if(pl.blk>2.5){pl.blk=0;pl.go=false;pl.ph='wait2';pl.wait=0;c.th=0;c.st=0;return;}}else pl.blk=0;
+  c.st=clamp(diff*3,-1,1);c.th=cp<2?(c.vf>3?-1:0):(c.vf<cp?1:(c.vf>cp+8?-1:0));c.hb=false;
+  if(off<5&&Math.abs(angDiff(c.a,d*PI/2))<.3){W4.stats.pullDone++;c._pullEnd=[gtime,+pl.t.toFixed(1),Math.round(per-lane)];ai.pull=null;ai.init=false;}
+  else if(pl.t>16){const st0=pl.st0;if(off>10&&st0&&!st0.car&&!st0.res&&Math.hypot(c.x-st0.x,c.y-st0.y)<24){W4.stats.pullBack++;w4ParkDone(c,st0);W4.stats.parkDone--;}else{W4.stats.pullTO++;ai.pull=null;ai.init=false;}}}
+// ---- a pedestrian walks to a parked car, gets in, and drives off ----
+const w4PedOk=p=>!p.dead&&!p.cop&&p.state==='wander'&&(!p.kind||p.kind==='ped')&&!p.inj&&!p.medic&&!p.off&&!p.mugger&&!p.towOp&&!p.goCar&&!(p.exitT>0)&&!p.hook&&!p.claimed;
+function w4SideOf(c){const st=c.curb&&c.curb.strip;if(!st)return 1;const wx=st.ax==='v'?st.s:0,wy=st.ax==='v'?0:st.s;return Math.sign(-wx*Math.sin(c.a)+wy*Math.cos(c.a))||1;}
+function w4Door(c,side,m){const fx=Math.cos(c.a),fy=Math.sin(c.a),k=c.W/2+(m||4);return[c.x+fx*3-fy*side*k,c.y+fy*3+fx*side*k];}
+function w4LeaveOk(c){if(!c||!c.rest||c.towed||c.leaving||c.everPlayer||c.type==='tow')return false;if(W4.scene&&(W4.scene.car===c))return false;
+  const g2=w4Gaps(c);return g2[0]+Math.min(14,Math.max(0,g2[1]-6))>=28;}
+function w4StartLeave(c,force){if(!w4LeaveOk(c))return null;const side=w4SideOf(c),door=w4Door(c,side,4);let ped=null,bd=170;
+  const S0=c.curb.strip,v0=S0.ax==='v';for(const p of peds){if(!w4PedOk(p))continue;const lt=((v0?p.x:p.y)-S0.curb)*S0.s;if(lt<19||lt>34)continue;const d=Math.hypot(p.x-door[0],p.y-door[1]);if(d<bd&&los(p.x,p.y,door[0],door[1])){bd=d;ped=p;}}
+  if(!ped){const S=c.curb.strip,v=S.ax==='v';for(const k of R()<.5?[1,-1]:[-1,1])for(const dd of[150,120,95]){const al=(v?c.y:c.x)+k*dd,pp=S.curb+S.s*25,x=v?pp:al,y=v?al:pp;
+      if(tileW(x,y)!==SIDE||(!force&&inView(x,y,10))||!los(x,y,door[0],door[1]))continue;ped=makePed(x,y,false);peds.push(ped);break;}if(!ped)return null;}
+  ped.goCar={c,side,t:0,et:-1};c.leaving=ped;W4.stats.leave++;return ped;}
+function w4NearFill(){const vr=Math.hypot(LW,LH)/2/S;let n=0,o=0;for(const st of W4.stalls){if(st.kind!=='curb'||!st.near)continue;if(Math.hypot(st.x-focus.x,st.y-focus.y)>vr+120)continue;n++;if(st.car||st.res)o++;}return n?o/n:.5;}
+function w4TryLeave(){if(w4NearFill()<.3)return false;const vr=Math.hypot(LW,LH)/2/S;let n=0;for(const c of cars)if(c.driver==='ai')n++;if(n>=TRAFFIC+4)return false;
+  const cand=[];for(const st of W4.stalls){if(st.kind!=='curb'||!st.car||!st.car.rest)continue;const d=Math.hypot(st.x-focus.x,st.y-focus.y);if(d<vr+40&&d>50)cand.push(st.car);}
+  for(let i=0;i<8&&cand.length;i++){const c=cand.splice(Math.floor(R()*cand.length),1)[0];if(w4StartLeave(c))return true;}return false;}
+function w4PedToCar(p,dt){const g2=p.goCar,c=g2.c;g2.t+=dt;
+  const ok=cars.includes(c)&&c.rest&&!c.towed&&c.leaving===p&&!(W4.scene&&W4.scene.car===c)&&p.state!=='flee'&&g2.t<30;
+  if(!ok){p.goCar=null;if(c.leaving===p)c.leaving=null;if(g2.et<0)W4.stats.leaveAbort++;return false;}
+  if(g2.et<0){let dr=w4Door(c,g2.side,4.5),fin=true;const S=c.curb&&c.curb.strip;
+    if(S){const v=S.ax==='v',pa=v?p.y:p.x,pl2=((v?p.x:p.y)-S.curb)*S.s,da=(v?dr[1]:dr[0])-pa,wp=S.curb+S.s*26;if(Math.abs(da)>4){fin=false;if(pl2<23)dr=v?[wp,p.y]:[p.x,wp];else dr=v?[wp,dr[1]]:[dr[0],wp];}}
+    const dx=dr[0]-p.x,dy=dr[1]-p.y,d=Math.hypot(dx,dy);
+    if(!fin&&d<=2.5){p.x=dr[0];p.y=dr[1];return true;}
+    if(d>2.5){const sp=Math.min(d,40*dt);p.x+=dx/d*sp;p.y+=dy/d*sp;p.a=Math.atan2(dy,dx);p.walk+=dt*9;return true;}
+    g2.et=0;c.doorT=1.1;c.doorSide=g2.side;}
+  g2.et+=dt;p.a=Math.atan2(c.y-p.y,c.x-p.x);if(g2.et>.6){p._rm=true;p.goCar=null;c.leaving=null;W4.stats.leaveIn++;w4PullOut(c,1.5);}return true;}
+// ---- a traffic car pulls into a free stall, parks, and the driver walks off ----
+function w4TryPark(){const vr=Math.hypot(LW,LH)/2/S,cs=cars.filter(c=>c.driver==='ai'&&c.ai&&c.ai.mode==='traffic'&&!c.ai.pull&&!c.ai.park&&!c.ai.job&&!c.ai.scene&&!(c.ai.panic>0)&&!c.tow&&c.type!=='tow'&&c.type!=='ambulance'&&c.type!=='police'&&!c.everPlayer&&Math.hypot(c.x-focus.x,c.y-focus.y)<vr+120);
+  while(cs.length){const c=cs.splice(Math.floor(R()*cs.length),1)[0],ai=c.ai,d=ai.dir,L=ai.L;if(!L||L.offs.length!==2||!ai.init||ai.ov||ai.lo!==ai.home||ai.revT>0||ai.pushT>0)continue;const fx=DX[d],fy=DY[d];
+    if(Math.abs(angDiff(c.a,d*PI/2))>.2)continue;const nx=nextNode(c);
+    for(const S of W4.strips){if(S.L!==L||S.dir!==d)continue;for(const st of S.stalls){if(st.car||st.res)continue;const dx=st.x-c.x,dy=st.y-c.y,al=dx*fx+dy*fy,lt=-dx*fy+dy*fx;
+      if(al<70||al>240||lt<15||lt>40)continue;if(nx&&nx.dE<al+20)continue;if(!w4Free(st.x,st.y,st.a,c.L+16,c.W+2,c))continue;
+      ai.park={st,ph:'app',t:0};st.res=c;W4.stats.park++;return true;}}}return false;}
+function w4ParkDrive(c,dt,o){const ai=c.ai,P=ai.park,st=P.st,d=ai.dir,fx=DX[d],fy=DY[d];P.t+=dt;
+  const al=(st.x-c.x)*fx+(st.y-c.y)*fy;
+  if(st.car||st.res!==c||P.t>16){if(st.res===c)st.res=null;ai.park=null;ai.init=false;W4.stats.parkAbort++;return o(c,dt);}
+  if(P.ph==='app'){if(ai.ov){if(st.res===c)st.res=null;ai.park=null;W4.stats.parkAbort++;return o(c,dt);}const ld0=laneAhead(c,al+24,0);if(ld0&&ld0.gap<al-8&&ld0.sp<20){if(st.res===c)st.res=null;ai.park=null;W4.stats.parkAbort++;return o(c,dt);}o(c,dt);const tgt=clamp(al*1.1,32,ai.cruise);if(c.vf>tgt+4)c.th=-1;else if(c.vf>tgt&&c.th>0)c.th=0;if(al<=50)P.ph='in';return;}
+  if(P.ph==='in'){const tx=st.x+Math.cos(st.a)*16,ty=st.y+Math.sin(st.a)*16,diff=angDiff(Math.atan2(ty-c.y,tx-c.x),c.a),tgt=clamp(al*1.1+8,10,30);
+    c.st=clamp(diff*3,-1,1);c.th=c.vf<tgt?1:(c.vf>tgt+6?-1:0);c.hb=false;if(al<4)P.ph='set';return;}
+  c.st=clamp(angDiff(st.a,c.a)*3,-1,1);c.th=c.vf>2?-1:(c.vf<-2?1:0);c.hb=false;const k=Math.min(1,dt*4);c.x+=(st.x-c.x)*k;c.y+=(st.y-c.y)*k;c.a+=angDiff(st.a,c.a)*k;
+  if(Math.hypot(st.x-c.x,st.y-c.y)<1.5&&Math.abs(c.vf)<4)w4ParkDone(c,st);}
+function w4ParkDone(c,st){c.x=st.x;c.y=st.y;c.a=st.a;c.vx=c.vy=c.av=c.vf=0;c.th=c.st=0;c.braking=false;c.driver=null;c.ai=null;st.res=null;st.car=c;st.occ=true;c.curb=st;c.rest=c.hp>=c.maxHp;
+  const side=w4SideOf(c),dr=w4Door(c,side,5);c.doorT=1.1;c.doorSide=side;const p=makePed(dr[0],dr[1],false);p.exitT=.75;p.a=st.a+(R()<.5?0:PI);peds.push(p);W4.stats.parkDone++;}
+aiTraffic=(o=>function(c,dt){const ai=c.ai;if(ai&&ai.pull){w4Pull(c,dt);return;}if(ai&&ai.park){w4ParkDrive(c,dt,o);return;}o(c,dt);})(aiTraffic);
 // ---------------- player towing ----------------
 function w4HookTarget(t){const h=w4Hitch(t);let best=null,bd=22;
   for(const c of cars){if(c===t||c===player.inCar||c.towed||c.tow)continue;if(Math.abs(c.x-h[0])>50||Math.abs(c.y-h[1])>50)continue;const fx=Math.cos(c.a),fy=Math.sin(c.a);
@@ -3222,18 +3271,23 @@ updateCar=(o=>function(c,dt){
   if(c.towed){const t=c.towed;if(!cars.includes(t)||t.wreck||c.wreck)w4Release(t,c);else{w4PushPeds(c);return;}}
   if(c.rest){if(c.driver||c.wreck||c.fire>0||c.hp<c.maxHp||Math.abs(c.vx)+Math.abs(c.vy)>1||Math.abs(c.av)>.05)w4Detach(c);else{w4PushPeds(c);return;}}
   o(c,dt);
-  const ai=c.ai;if(ai&&(c.driver==='ai'||c.driver==='cop')&&ai.mode==='traffic'&&!ai.pull&&W4.stripT)w4KeepOut(c);
+  const ai=c.ai;if(ai&&(c.driver==='ai'||c.driver==='cop')&&ai.mode==='traffic'&&!ai.pull&&!ai.park&&W4.stripT)w4KeepOut(c);
   if(c.tow)w4TowPos(c,dt);
   if(W4.gas.length&&!c.towed)w4GasCollide(c);
   if(W4.hyd.length&&!c.wreck)w4Hydrants(c);})(updateCar);
 carCar=(o=>function(a,b){if(a.rest&&b.rest)return;if(a.tow===b||b.tow===a)return;
-  if((a.towed&&b!==player.inCar)||(b.towed&&a!==player.inCar))return;o(a,b);})(carCar);
+  if((a.towed&&b!==player.inCar)||(b.towed&&a!==player.inCar))return;
+  const m=(a.ai&&(a.ai.pull||a.ai.park))||(b.ai&&(b.ai.pull||b.ai.park));if(!m)return o(a,b);
+  const ra=a.vx-b.vx,rb=a.vy-b.vy,ha=a._hitT,hb=b._hitT;o(a,b);if((a._hitT!==ha||b._hitT!==hb)&&W4.hitLog){const M=(a.ai&&(a.ai.pull||a.ai.park))?a:b,Oo=M===a?b:a,pp=M.ai.pull?'pull:'+(M.ai.pull.go?'go':M.ai.pull.ph||'wait'):'park:'+M.ai.park.ph;
+    W4.hitLog.push([pp,Oo.rest?'parked':Oo.driver||'none',Oo.ai&&Oo.ai.mode,Math.round(Math.hypot(ra,rb)),Math.round(M.vf),Math.round(Oo.vf),M.id,Math.round(M.x),Math.round(M.y),(M.a*57|0),Oo.id,Math.round(Oo.x),Math.round(Oo.y),(Oo.a*57|0),Oo.ai&&Oo.ai.lo,Oo.ai&&Oo.ai.ov]);}})(carCar);
 manage=(o=>function(){const hide=[];for(const c of cars)if((c.curb&&c.rest)||c.towed)hide.push(c);
   if(hide.length){const hs=new Set(hide);cars=cars.filter(c=>!hs.has(c));}
   o();
   for(const c of hide){if(c.towed&&!cars.includes(c.towed)){if(c.everPlayer&&state==='play'){W4.stats.impound++;notify('YOUR CAR WAS TOWED TO THE IMPOUND LOT','warn');}continue;}cars.push(c);}})(manage);
 // peds keep to the inner sidewalk next to parked cars; tow operators stay at work
 updatePed=(o=>function(p,dt){
+  if(p.exitT>0&&!p.dead){p.exitT-=dt;return;}
+  if(p.goCar&&!p.dead&&w4PedToCar(p,dt))return;
   if(p.towOp&&!p.dead){const S=p.towOp;if(S===true||p.state==='flee'||p.hp<(p.hp0||p.hp)){p.towOp=null;}else{const c=S.car;p.a=Math.atan2(c.y-p.y,c.x-p.x);p.walk+=dt*3*(Math.sin(gtime*2.2)>0?1:0);
       if(R()<dt*3)addP(p.x+Math.cos(p.a)*6,p.y+Math.sin(p.a)*6,rr(-20,20),rr(-20,20),.18,1.5,'#ffe070',true);return;}}
   o(p,dt);
@@ -3241,12 +3295,15 @@ updatePed=(o=>function(p,dt){
     if(nc<.55){const push=Math.min(W4_SW+4-sa.lat,40*dt)*S.s;if(S.ax==='v')p.x+=push;else p.y+=push;}}}})(updatePed);
 // ---------------- world tick ----------------
 updateWorld=(o=>function(dt){o(dt);if(!W4.ready)return;
-  for(const c of cars){const ai=c.ai;if(ai&&(c.driver==='ai'||c.driver==='cop')&&ai.mode==='traffic'&&!ai.pull)w4KeepOut(c);}
+  for(const c of cars){const ai=c.ai;if(ai&&(c.driver==='ai'||c.driver==='cop')&&ai.mode==='traffic'&&!ai.pull&&!ai.park)w4KeepOut(c);if(c.doorT>0)c.doorT-=dt;}
+  if(peds.some(p=>p._rm))peds=peds.filter(p=>!p._rm);
+  for(const st of W4.stalls)if(st.res&&!(st.res.ai&&st.res.ai.park&&st.res.ai.park.st===st&&cars.includes(st.res)))st.res=null;
   W4.streamT-=dt;if(W4.streamT<=0){W4.streamT=.4;w4Stream();}
   const pc=player.inCar;if(pc){W4.lastPlayerCar=pc;W4.leftT=gtime;}
   if(state==='play'&&!W4.off){
     W4.towT-=dt;if(W4.towT<=0){W4.towT=w4TrySceneAuto()?rr(45,85):rr(8,14);}
-    W4.pullT-=dt;if(W4.pullT<=0){W4.pullT=rr(12,24);w4TryPull();}
+    W4.pullT-=dt;if(W4.pullT<=0)W4.pullT=w4TryLeave()?rr(14,28):rr(3,6);
+    W4.parkT-=dt;if(W4.parkT<=0)W4.parkT=w4TryPark()?(w4NearFill()<.36?rr(5,10):w4NearFill()<.44?rr(9,16):rr(16,30)):rr(2,5);
   }
   if(state==='play'){w4TickScene(dt);
     if(pc&&pc.type==='tow'&&W4.prevCar!==pc){let seen=false;try{seen=localStorage.getItem('pta_towhint')==='1';}catch(e){}
@@ -3273,9 +3330,14 @@ function w4DrawTow(c){const L=c.L,Wd=c.W,hl=L/2,hw=Wd/2,ai=c.ai,work=ai&&ai.mode
   if(c===player.inCar&&(W4.hookCand||c.tow)){const h=w4Hitch(c);g.font='bold 7px '+FONT;g.textAlign='center';g.textBaseline='middle';const t=(TOUCHUI?'':KL('tow')+': ')+(c.tow?'DROP':'HOOK');
     const w=g.measureText(t).width+6;const lx=c.x,ly=c.y-26;g.fillStyle='rgba(0,0,0,.6)';g.fillRect(lx-w/2,ly-5,w,10);g.fillStyle='#ffb020';g.fillText(t,lx,ly);
     if(W4.hookCand){const k=W4.hookCand.c,e=W4.hookCand.end;g.strokeStyle='rgba(255,176,32,.8)';g.lineWidth=1.2;g.beginPath();g.arc(k.x+Math.cos(k.a)*e*k.L/2,k.y+Math.sin(k.a)*e*k.L/2,4+Math.sin(gtime*8),0,TAU);g.stroke();}}}
+function w4DrawExtras(c){const ai=c.ai,hl=c.L/2,hw=c.W/2;let bl=0;if(ai&&ai.pull)bl=ai.pull.side||-1;else if(ai&&ai.park)bl=1;
+  if(!bl&&!(c.doorT>0))return;g.save();g.translate(c.x,c.y);g.rotate(c.a);
+  if(bl&&Math.floor(gtime*3)%2){g.fillStyle='#ffb020';g.fillRect(hl-2.5,bl*(hw-1.2)-1.2,2.5,2.4);g.fillRect(-hl,bl*(hw-1.2)-1.2,2.5,2.4);g.globalAlpha=.3;g.beginPath();g.arc(hl-1,bl*hw,4,0,TAU);g.arc(-hl+1,bl*hw,4,0,TAU);g.fill();g.globalAlpha=1;}
+  if(c.doorT>0){const k=Math.sin(clamp(1-c.doorT/1.1,0,1)*PI),th=k*1.05,sd=c.doorSide||1,hx=c.L*.16,hy=sd*hw;g.strokeStyle=c.dark||'#333';g.lineWidth=2;g.lineCap='round';g.beginPath();g.moveTo(hx,hy);g.lineTo(hx-Math.cos(th)*9,hy+sd*Math.sin(th)*9);g.stroke();g.lineCap='butt';}
+  g.restore();}
 drawCar=(o=>function(c){if(c.type==='tow'&&!c.wreck)return w4DrawTow(c);
   if(c.towed&&!c.wreck){g.save();g.translate(c.x,c.y);g.rotate(c.a);g.fillStyle='rgba(0,0,0,.28)';g.fillRect(-c.L/2+3,-c.W/2+3,c.L,c.W);g.restore();setWorld(.022);o(c);setWorld(0);return;}
-  o(c);})(drawCar);
+  o(c);if(!c.wreck)w4DrawExtras(c);})(drawCar);
 function w4DrawCanopies(){for(const gs of W4.gas){const cn=gs.can;if(cn.x1<vx0-40||cn.x0>vx1+40||cn.y1<vy0-40||cn.y0>vy1+40)continue;const CH=W4.CH;
   for(const p of gs.pumps)box3(p.x0,p.y0,p.x1,p.y1,0,.022,'#a01818','#701010','#901616','#781212','#e8e8e8');
   for(const p of gs.pil)box3(p.x0,p.y0,p.x1,p.y1,0,CH-.006,'#c8c8c8','#909090','#b8b8b8','#a0a0a0',null);
@@ -3295,6 +3357,6 @@ drawPOIGround=(o=>function(){o();for(const h of W4.hyd){if(!inView(h.x,h.y,20))c
 evReset=(o=>function(){o();w4ResetStalls();})(evReset);
 if(window.__game&&window.__game.ev)window.__game.ev.reset=evReset;
 window.__game.tow={W4,reset:()=>w4ResetStalls(),stream:w4Stream,startScene:w4StartScene,tickScene:w4TickScene,towAction:w4TowAction,hookTarget:w4HookTarget,attach:w4Attach,release:w4Release,
-  drop:w4Drop,makeTow:w4MakeTow,haul:w4Haul,toTow:w4ToTow,pullOut:w4PullOut,stripAt:w4StripAt,hitch:w4Hitch,free:w4Free,trySceneAuto:w4TrySceneAuto};
+  drop:w4Drop,makeTow:w4MakeTow,haul:w4Haul,toTow:w4ToTow,pullOut:w4PullOut,startLeave:w4StartLeave,tryLeave:w4TryLeave,tryPark:w4TryPark,gaps:w4Gaps,stripAt:w4StripAt,hitch:w4Hitch,free:w4Free,trySceneAuto:w4TrySceneAuto};
 
 </script></body></html>
