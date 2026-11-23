@@ -2365,7 +2365,7 @@ function aiTraffic(c,dt){const ai=c.ai;if(!V4READY){c.th=0;c.st=0;return;}if(!ai
     if(nd.ctrl==='light'){const st=lightState(nd,isV(d));
       let stop=st==='r'||(st==='y'&&sl>sp*sp/(2*420)+4);
       // don't block the box: a car stopped just past it in our lane
-      if(!stop&&plan&&plan.dir===d){const ex=laneAhead(c,nx.dE+(nd.x1-nd.x0)+c.L+30,latOf(c,L,ai.lo),true);if(ex&&ex.gap>nx.dE-c.L/2&&ex.sp<25&&ex.gap<nx.dE+Math.abs(isV(d)?nd.y1-nd.y0:nd.x1-nd.x0)+12)stop=true;}
+      if(!stop&&plan&&plan.dir===d){const ex=laneAhead(c,nx.dE+(nd.x1-nd.x0)+c.L+30,latOf(c,L,ai.lo),true);if(ex&&ex.gap>nx.dE-c.L/2&&ex.sp<25&&ex.gap<nx.dE+Math.abs(isV(d)?nd.y1-nd.y0:nd.x1-nd.x0)+12){const parked=ex.o.ai&&(ex.o.ai.scene||ex.o.ai.mode==='onscene'||ex.o.ai.mode==='crash');ai.boxW=parked?(ai.boxW||0)+dt:0;if(!(parked&&ai.boxW>6))stop=true;}}
       const boxD=nx.dE-c.L/2-3;
       if(stop&&sl>-6){hardCap=stopProf(sl);target=Math.min(target,hardCap);ai.waiting=sl<40;}
       else if(st==='r'&&sp<30&&boxD>Math.max(0,sp)*sp/(2*420)+1){hardCap=stopProf(boxD);target=Math.min(target,hardCap);ai.waiting=true;}
@@ -2396,7 +2396,7 @@ function aiTraffic(c,dt){const ai=c.ai;if(!V4READY){c.th=0;c.st=0;return;}if(!ai
   if(ai.ov){ai.ov.t-=dt;const back=latOf(c,L,ai.ov.home);const oncoming=laneAhead(c,90,latOf(c,L,ai.lo),true);
     if((ai.ov.t<4&&laneClear(c,back,c.L+6,36))||ai.ov.t<=0||(oncoming&&oncoming.sp<0&&oncoming.gap<60&&laneClear(c,back,8,30))){ai.lo=ai.ov.home;ai.ov=null;}
     else if(oncoming&&oncoming.sp<0)target=Math.min(target,40);}
-  if(ign)target=Math.max(target,Math.min(c.max*.8,ai.cruise*2));
+  if(ign&&!ai.dest)target=Math.max(target,Math.min(c.max*.8,ai.cruise*2));
   // anti-gridlock: if nothing has moved for a long time, creep through
   if(Math.abs(sp)<6&&!ai.waiting&&!ai.queued)ai.still+=dt;else if(Math.abs(sp)>20)ai.still=Math.max(0,ai.still-dt*2);
   if(ai.pushT>0){ai.pushT-=dt;target=Math.min(Math.max(target,45),hardCap);}else if(ai.still>7){ai.pushT=1.6;ai.still=3;}
@@ -2742,5 +2742,270 @@ function drawStarBack(HL){const b=HL.st&&HL.st.back;if(!b)return;ctx.save();ctx.
   ctx.strokeStyle='rgba(255,210,58,.5)';ctx.lineWidth=Math.max(1,1.2*DPRS);ctx.stroke();ctx.restore();}
 // top edge of the right-hand touch buttons (previous frame's layout), so the phone + stars column stops above them
 function hubBtnTop(){let t=H;if(TS&&TS.btns)for(const b of TS.btns){if(b.rect)continue;if(b.x+b.r>W*.6&&b.y>H*.3)t=Math.min(t,b.y-b.r);}return t;}
+
+// ======================================================================
+//  v4e: city events - tighter turns (a few sloppy ones), NPC crashes,
+//  police responses that genuinely tie units up, ambulances + paramedics,
+//  random street muggings. Busy cops ignore the player at low heat.
+// ======================================================================
+CAR_TYPES.ambulance={L:38,W:17,max:300,acc:230,hp:170,m:1.7,name:'AMBULANCE'};CAR_VALUE.ambulance=900;
+const EV={jobs:[],nid:1,accT:70,mugT:85,medT:0,lastCrash:-99,lastCrime:null,supHeat:0,
+  stats:{turns:0,wide:0,accidents:0,natural:0,forced:0,muggings:0,mugReported:0,arrests:0,meds:0,ambArrive:0,copArrive:0,dispatched:0,released:0,caught:0}};
+const EVCFG={accMin:70,accMax:130,mugMin:135,mugMax:205,sloppy:.065,crashGap:40,naturalGap:120,maxScenes:2,maxAmb:2};
+const distName=(x,y)=>DISTRICTS[districtAt(x,y)].name;
+// ---------------------------------------------------------------- turning
+function mkTurn(c,nx,plan){const ai=c.ai,d=ai.dir,d2=plan.dir,sg=sgn(d),nd=nx.nd,right=d2===RIGHT(d);
+  const a=laneXY(ai.L,ai.lo);let b=laneXY(plan.L,plan.lo);const wide=R()<(ai.sloppy?.5:.035);
+  if(wide&&right)b+=sg*T;  // right: swing out into the next/oncoming lane; left: cut the corner (bigger radius, below)
+  const X=isV(d)?[a,b]:[b,a],ui=[DX[d],DY[d]],uo=[DX[d2],DY[d2]];
+  const e=(b-nx.entry)*sg,ex2=sgn(d2)>0?(isV(d2)?nd.y1:nd.x1):(isV(d2)?nd.y0:nd.x0),f=(ex2-(isV(d2)?X[1]:X[0]))*sgn(d2);
+  let r=clamp(Math.min(e,f)+6,26,90);if(wide)r=right?Math.min(115,r*1.45+6):Math.min(130,r*1.7+12);r=Math.min(r,Math.max(26,e+10));  // never start turning before the box
+  const S=[X[0]-ui[0]*r,X[1]-ui[1]*r],C=[S[0]+uo[0]*r,S[1]+uo[1]*r],E=[X[0]+uo[0]*r,X[1]+uo[1]*r];
+  EV.stats.turns++;if(wide)EV.stats.wide++;
+  return{id:nd.id,C,S,E,ui,uo,r,s:ui[0]*uo[1]-ui[1]*uo[0],ang0:Math.atan2(S[1]-C[1],S[0]-C[0]),vArc:clamp(1.15*r+12,34,80)*(wide?1.3:1),wide,t:0};}
+function turnArc(c,dt){const ai=c.ai;let tn=ai.turn;
+  if(!tn){const plan=ai.plan;if(!plan||plan.dir===ai.dir||plan.dir===(ai.dir+2)%4||ai.revT>0)return;const nx=nextNode(c);if(!nx||nx.nd.id!==plan.id||nx.dE>80)return;tn=ai.turn=mkTurn(c,nx,plan);}
+  tn.t+=dt;if(tn.t>7||ai.revT>0){ai.turn=null;return;}
+  const sp=Math.max(0,c.vf),pre=(c.x-tn.S[0])*tn.ui[0]+(c.y-tn.S[1])*tn.ui[1];
+  if(pre<-2){if(pre>-50&&sp>tn.vArc+4)c.th=-1;return;}
+  let th=angDiff(Math.atan2(c.y-tn.C[1],c.x-tn.C[0]),tn.ang0)*tn.s;if(th>PI/2-.02){ai.turn=null;return;}th=Math.max(0,th);
+  const look=9+sp*.16,tt=th+look/tn.r;let tx,ty;
+  if(tt<PI/2){const ang=tn.ang0+tn.s*tt;tx=tn.C[0]+Math.cos(ang)*tn.r;ty=tn.C[1]+Math.sin(ang)*tn.r;}
+  else{const rem=look-(PI/2-th)*tn.r;tx=tn.E[0]+tn.uo[0]*rem;ty=tn.E[1]+tn.uo[1]*rem;}
+  const diff=angDiff(Math.atan2(ty-c.y,tx-c.x),c.a),tr=2.9-1.1*Math.min(1,sp/c.max),sf=Math.max(.15,Math.min(1,sp/50));
+  const ff=tt<PI/2?tn.s*(sp/tn.r)/(tr*sf):0;c.st=clamp(ff+diff*2.4,-1,1);
+  if(ai.distr>0)return;
+  const lead=laneAhead(c,30+sp*.5,0),nx=nextNode(c),before=nx&&nx.nd.id===tn.id&&nx.dE>0;
+  let th2=lead&&lead.gap<sp*.45+10?(sp>4?-1:0):(sp>tn.vArc+5?-1:(sp>tn.vArc?0:Math.max(c.th,.6)));
+  c.th=before?Math.min(c.th,th2):th2;}
+aiTraffic=(o=>function(c,dt){const ai=c.ai;o(c,dt);if(!V4READY||!ai.init)return;
+  if(ai.sloppy===undefined)ai.sloppy=R()<EVCFG.sloppy;
+  turnArc(c,dt);
+  if(ai.distr>0){ai.distr-=dt;if(!ai.turn)c.th=1;c.braking=false;return;}
+  // rubbernecking: everyone crawls past an active scene (crew and injured on foot)
+  if(ai.dest){const nx=nextNode(c);if(nx&&nx.nd.ctrl!=='none'&&nx.dE<90&&nx.dE>-8&&c.vf>58)c.th=-1;}
+  for(const j of EV.jobs){if(j.done)continue;const pts=j.kind==='mug'?[]:[j];for(const u of j.units)if(u!==c&&u.ai&&u.ai.mode==='onscene')pts.push(u);
+    for(const q of pts){const d=Math.hypot(c.x-q.x,c.y-q.y);if(d>(q===j?170:120))continue;const vm=30+d*.18;if(c.vf>vm+6)c.th=-1;else if(c.vf>vm)c.th=Math.min(c.th,0);}
+    // crew on foot crossing the road ahead
+    if(j.crew.length){const fx=Math.cos(c.a),fy=Math.sin(c.a);for(const q of j.crew){const dx=q.x-c.x,dy=q.y-c.y,f=dx*fx+dy*fy;if(f<0||f>40+c.vf*.6)continue;if(Math.abs(-dx*fy+dy*fx)>26)continue;if(tileW(q.x,q.y)!==ROAD)continue;if(c.vf>Math.max(0,(f-18)*1.2))c.th=-1;}}}})(aiTraffic);
+// responders route greedily toward their destination instead of picking random turns
+planAt=(o=>function(c,nd){const ai=c.ai;if(!ai.dest)return o(c,nd);const d=ai.dir,opts=[];
+  for(const o2 of[d,RIGHT(d),LEFT(d)])if(canGo(nd,o2))opts.push(o2);if(!opts.length&&canGo(nd,(d+2)%4))opts.push((d+2)%4);if(!opts.length)return null;
+  const vx=ai.dest.x-nd.cx,vy=ai.dest.y-nd.cy,vl=Math.hypot(vx,vy)||1;let nd2=opts[0],bs=-9;
+  for(const o2 of opts){const s=(DX[o2]*vx+DY[o2]*vy)/vl+(o2===d?.12:0)+R()*.05;if(s>bs){bs=s;nd2=o2;}}
+  const L2=isV(nd2)?nd.V:nd.H,lo=nd2===d?(L2.lanes[nd2].includes(ai.lo)?ai.lo:outerLane(L2,nd2)):nd2===LEFT(d)?innerLane(L2,nd2):outerLane(L2,nd2);
+  return{id:nd.id,dir:nd2,L:L2,lo};})(planAt);
+// ---------------------------------------------------------------- helpers
+function laneSpot(cx,cy,r0,r1,avoidView,toward){for(let i=0;i<40;i++){const a=R()*TAU,d=rr(r0,r1),x=cx+Math.cos(a)*d,y=cy+Math.sin(a)*d,tx=Math.floor(x/T),ty=Math.floor(y/T);
+    if(tx<1||ty<1||tx>=N-1||ty>=N-1)continue;const k=ty*N+tx;if(tileAt(tx,ty)!==ROAD||NODEAT[k]>=0||((vAt[k]>=0)===(hAt[k]>=0)))continue;
+    const ax=vAt[k]>=0?'v':'h',L=ax==='v'?VL[vAt[k]]:HL[hAt[k]],o=(ax==='v'?tx:ty)-L.i*P;const dirs=Object.keys(L.lanes).map(Number).filter(dd=>L.lanes[dd].includes(o));if(!dirs.length)continue;
+    let dir=dirs[0],bs=-1e9;for(const dd of dirs){const s=toward?DX[dd]*(cx-x)+DY[dd]*(cy-y):R();if(s>bs){bs=s;dir=dd;}}
+    const px=ax==='v'?laneXY(L,o):(tx+.5)*T,py=ax==='v'?(ty+.5)*T:laneXY(L,o);if(carNear(px,py,44))continue;if(avoidView&&i<30&&inView(px,py,50))continue;return{x:px,y:py,dir,L,o};}return null;}
+// a lane spot upstream of (x,y) on the same street, pointing at it: responders arrive straight down the road
+function upstreamSpot(x,y,r0,r1){const tx=Math.floor(x/T),ty=Math.floor(y/T),k=ty*N+tx;const opts=[];
+  for(const ax of['v','h']){const li=ax==='v'?vAt[k]:hAt[k];if(li<0)continue;const L=ax==='v'?VL[li]:HL[li];if(!L)continue;
+    for(const d of Object.keys(L.lanes).map(Number)){for(let i=0;i<6;i++){const dist=rr(r0,r1),px0=x-DX[d]*dist,py0=y-DY[d]*dist,kx=Math.floor(px0/T),ky=Math.floor(py0/T);if(kx<1||ky<1||kx>=N-1||ky>=N-1)continue;
+        const kk=ky*N+kx;if(NODEAT[kk]>=0||(ax==='v'?vAt[kk]:hAt[kk])!==li)continue;const o=outerLane(L,d),px=ax==='v'?laneXY(L,o):(kx+.5)*T,py=ax==='v'?(ky+.5)*T:laneXY(L,o);
+        if(carNear(px,py,44))continue;opts.push({x:px,y:py,dir:d,L,o,vis:inView(px,py,50)});break;}}}
+  if(!opts.length)return null;return opts.find(o=>!o.vis)||opts[0];}
+function walkSpot(cx,cy,r0,r1){for(let i=0;i<24;i++){const a=R()*TAU,d=rr(r0,r1),x=cx+Math.cos(a)*d,y=cy+Math.sin(a)*d;if(!solid(tileW(x,y))&&!carNear(x,y,14)&&los(cx,cy,x,y))return{x,y};}return null;}
+function prepUnit(c){const ai=c.ai;for(const [k,v] of [['cruise',rr(130,155)],['blockT',0],['panic',0],['stuck',0],['rev',0],['navT',0]])if(ai[k]===undefined||ai[k]===null)ai[k]=v;ai.nav=null;ai.init=false;ai.plan=null;ai.turn=null;ai.ov=null;ai.distr=0;}
+function makeUnit(type,sp){const c=makeCar(type,sp.x,sp.y,sp.dir*PI/2);c.driver=type==='police'?'cop':'ai';
+  if(type==='ambulance'){c.color='#f2f2f2';c.roof='#ffffff';c.dark='#b8b8b8';}
+  c.ai={mode:'respond',dir:sp.dir,cruise:rr(135,155),blockT:0,panic:1,stuck:0,rev:0,navT:0,nav:null};trafficInit(c);c.ai.dir=sp.dir;c.ai.L=sp.L;c.ai.lo=sp.o;c.ai.home=sp.o;
+  c.vx=DX[sp.dir]*90;c.vy=DY[sp.dir]*90;cars.push(c);return c;}
+function liveCar(c){return c&&cars.includes(c)&&!c.wreck&&c.ai&&c.driver!=='player';}
+function livePed(p){return p&&!p.dead&&peds.includes(p);}
+function copEngage(x,y){if(state!=='play'||!player.active)return false;if(stars>=4)return true;const tg=player.inCar||player,d=Math.hypot(tg.x-x,tg.y-y);
+  if(stars>0&&d<90&&los(x,y,tg.x,tg.y))return true;const lc=EV.lastCrime;
+  return!!(lc&&gtime-lc.t<1.3&&Math.hypot(lc.x-x,lc.y-y)<280&&los(x,y,lc.x,lc.y));}
+addHeat=(o=>function(v){if(EV.supHeat>0){EV.supHeat--;v=Math.min(v,10);}o(v);if(state==='play'&&v>0){const tg=player.inCar||player;EV.lastCrime={x:tg.x,y:tg.y,t:gtime};}})(addHeat);
+function copOutfit(p){return pedOutfit(Object.assign({},p,{cop:true,kind:null}));}
+function newOfficer(x,y){const p=makePed(x,y,false);p.off=true;p.gun=true;p.hp=60;p.shirt='#2a4a9a';p.pants='#1a2a4a';p.outfit=copOutfit(p);p.state='wander';return p;}
+function newMedic(x,y){const p=makePed(x,y,false);p.medic=true;p.kind='medic';p.hp=40;p.outfit={top:{t:'tee',c:'#f4f4f4'},pants:{t:'slacks',c:'#2a3a8a'},shoes:{t:'sneakers',c:'#eeeeee'},hat:{t:'cap',c:'#d02020'},glasses:null,hair:{t:'short',c:p.hair||'#222'}};return p;}
+function releaseUnit(c,job){const ai=c.ai;if(!ai)return;if(EV.dbg)EV.dbg.push(['rel',Math.round(c.x-(player.inCar||player).x),Math.round(c.y-(player.inCar||player).y),stars,ai.mode,EV.lastCrime&&+(gtime-EV.lastCrime.t).toFixed(1)].join(' '));ai.job=null;ai.dest=null;ai.panic=0;EV.stats.released++;
+  if(c.driver==='cop'&&stars>0&&player.active){ai.mode='chase';ai.stuck=0;ai.rev=0;ai.navT=0;}else{ai.mode='traffic';prepUnit(c);}
+  if(job){job.units=job.units.filter(u=>u!==c);for(const p of job.crew)if(p.unit===c&&p.off)releaseOfficer(p,job);}}
+function releaseOfficer(p,job){p.off=false;p.cop=true;p.task=null;p.unit=null;if(job)job.crew=job.crew.filter(q=>q!==p);}
+// ---------------------------------------------------------------- dispatch
+function dispatchCop(job){if(stars>=4||state!=='play')return null;let best=null,bd=1e9;
+  for(const c of cars){if(c.driver!=='cop'||c.type!=='police'||!c.ai||c.ai.job||c.deployed||c.wreck)continue;const m=c.ai.mode;
+    if(!(m==='traffic'||(m==='chase'&&stars<=2&&Math.hypot((player.inCar||player).x-c.x,(player.inCar||player).y-c.y)>300)))continue;
+    const d=Math.hypot(c.x-job.x,c.y-job.y);if(d<1000&&d<bd){bd=d;best=c;}}
+  if(best&&bd>(job.kind==='mug'?380:550))best=null;
+  if(best){prepUnit(best);best.ai.mode='respond';}
+  else{const sp=(job.kind!=='mug'&&upstreamSpot(job.x,job.y,280,480))||laneSpot(job.x,job.y,job.kind==='mug'?220:300,job.kind==='mug'?420:620,true,true);if(!sp)return null;best=makeUnit('police',sp);}
+  best.ai.job=job;best.ai.dest={x:job.x,y:job.y};best.ai.respT=0;best.ai.panic=1;job.units.push(best);job.lastDisp=job.t;EV.stats.dispatched++;return best;}
+function dispatchAmb(job){let n=0;for(const c of cars)if(c.type==='ambulance'&&c.ai&&c.ai.job)n++;if(n>=EVCFG.maxAmb)return null;
+  const sp=upstreamSpot(job.x,job.y,300,520)||laneSpot(job.x,job.y,320,650,true,true);if(!sp)return null;const c=makeUnit('ambulance',sp);c.ai.job=job;c.ai.dest={x:job.x,y:job.y};c.ai.respT=0;c.ai.amb=true;job.units.push(c);job.amb=c;return c;}
+// ---------------------------------------------------------------- incidents
+function sceneFree(c){return c&&!c.wreck&&c!==player.inCar&&c.driver!=='player'&&!(c.ai&&(c.ai.job||c.ai.scene));}
+function startCrash(a,b,forced){if(EV.off)return null;const ns=EV.jobs.filter(j=>j.kind==='crash'&&!j.done).length;if(ns>=EVCFG.maxScenes||gtime-EV.lastCrash<EVCFG.crashGap)return null;
+  const x=(a.x+b.x)/2,y=(a.y+b.y)/2;if(Math.hypot(x-focus.x,y-focus.y)>1100)return null;EV.lastCrash=gtime;
+  const job={id:EV.nid++,kind:'crash',x,y,t:0,dur:rr(30,42),units:[],crew:[],patients:[],cars:[a,b],done:false};
+  for(const c of[a,b]){if(!c.ai)c.ai={mode:'crash'};c.ai.scene=job;if(c.driver==='ai'){c.ai.mode='crash';c.ai.turn=null;c.ai.distr=0;}c.hp=Math.min(c.hp,c.maxHp*.36);c.av+=rr(-1.5,1.5);
+    for(let i=0;i<8;i++)addP(c.x+rr(-6,6),c.y+rr(-6,6),rr(-70,70),rr(-70,70),rr(.3,.7),2,pick(['#cfe8ff','#ffffff','#999']));}
+  const ninj=R()<.7?1:(R()<.5?2:0);for(let i=0;i<ninj;i++){const s=walkSpot(x,y,18,40);if(!s)continue;const p=makePed(s.x,s.y,false);p.inj=true;p.down=1e4;p.a=R()*TAU;p.state='wander';peds.push(p);job.patients.push(p);}
+  EV.stats.accidents++;if(forced)EV.stats.forced++;else EV.stats.natural++;{const w=[a,b].some(k=>k.ai&&k.ai.turn&&k.ai.turn.wide)?'wide':[a,b].some(k=>k.ai&&k.ai.turn)?'turn':'other';EV.stats['c_'+w]=(EV.stats['c_'+w]||0)+1;}
+  const u=dispatchCop(job);if(job.patients.length)dispatchAmb(job);
+  notify('CRASH IN '+distName(x,y)+(u?' \u2014 UNITS RESPONDING':'')+(job.amb?', AMBULANCE EN ROUTE':''),'news',1);
+  EV.jobs.push(job);return job;}
+// NPC-vs-NPC impact detector
+carCar=(o=>function(a,c){const dx=c.x-a.x,dy=c.y-a.y,lim=(a.L+c.L)/2;if(dx*dx+dy*dy>lim*lim)return;const ax=a.vx,ay=a.vy,cx=c.vx,cy=c.vy;o(a,c);
+  const dv=Math.hypot(a.vx-ax,a.vy-ay)+Math.hypot(c.vx-cx,c.vy-cy);if(dv>15){a._hitT=c._hitT=gtime;}if(state!=='play'||dv<45)return;
+  const civ=k=>k.driver==='ai'&&k.ai&&k.ai.mode==='traffic'&&k.type!=='ambulance',okO=k=>civ(k)||(!k.driver&&!k.wreck);
+  if(!sceneFree(a)||!sceneFree(c))return;if(!((civ(a)&&okO(c))||(civ(c)&&okO(a))))return;const forced=!!((a.ai&&a.ai.distr>0)||(c.ai&&c.ai.distr>0)||(a.ai&&a.ai.rr)||(c.ai&&c.ai.rr));
+  if(!forced&&(dv<62||gtime-EV.lastCrash<EVCFG.naturalGap))return;startCrash(a,c,forced);})(carCar);
+// occasionally make a driver careless: rear-ender or red-light runner
+function triggerCareless(){let cands=[];for(const c of cars){if(c.driver!=='ai'||!c.ai||c.ai.mode!=='traffic'||c.ai.job||c.ai.scene||c.type==='ambulance'||!c.ai.init)continue;
+    const d=Math.hypot(c.x-focus.x,c.y-focus.y);if(d<200||d>760||c.vf<55)continue;cands.push(c);}
+  for(const c of cands.sort(()=>R()-.5)){const sp=c.vf,ld=laneAhead(c,40+sp*.9,0,true);if(ld&&ld.o.ai&&ld.gap>25&&ld.gap<130&&ld.sp<sp*.5){c.ai.distr=3.2;return 'rear';}
+    const nx=nextNode(c);if(nx&&nx.nd.ctrl==='light'&&nx.dE>40&&nx.dE<170&&lightState(nx.nd,isV(c.ai.dir))!=='g'){let x=0;for(const o of cars)if(o!==c&&o.driver&&Math.hypot(o.x-nx.nd.cx,o.y-nx.nd.cy)<160)x++;if(x>=1){c.ai.panic=3.2;c.ai.rr=true;c.ai.distr=1.2;return 'red';}}}
+  return null;}
+function startMug(){let vic=null;const cand=[];for(const p of peds){if(p.dead||p.cop||p.off||p.medic||(p.kind&&p.kind!=='ped')||p.down>0||p.state!=='wander'||p.inj)continue;const d=Math.hypot(p.x-focus.x,p.y-focus.y);if(d>150&&d<520)cand.push(p);}
+  if(!cand.length)return null;vic=pick(cand);const s=walkSpot(vic.x,vic.y,55,95);if(!s)return null;
+  const m=makePed(s.x,s.y,false);m.kind='mugger';m.brave=false;m.spd=72;m.outfit={top:{t:'hoodie',c:pick(['#262626','#3a3a46','#2a3a2a'])},pants:{t:'jeans',c:'#1a1a24'},shoes:{t:'sneakers',c:'#111'},hat:{t:'beanie',c:'#111'},glasses:null,hair:{t:'buzz',c:'#111'}};
+  const job={id:EV.nid++,kind:'mug',x:vic.x,y:vic.y,t:0,phase:'approach',ph:0,mugger:m,victim:vic,units:[],crew:[],patients:[],cars:[],done:false,loot:ri(40,110)};
+  m.mug=job;vic.mugV=job;peds.push(m);EV.jobs.push(job);EV.stats.muggings++;return job;}
+function startMed(group){const x=group.reduce((s,p)=>s+p.x,0)/group.length,y=group.reduce((s,p)=>s+p.y,0)/group.length;
+  const job={id:EV.nid++,kind:'med',x,y,t:0,dur:60,units:[],crew:[],patients:group.slice(),cars:[],done:false};
+  for(const p of group)p.claimed=job;if(!dispatchAmb(job)){for(const p of group)p.claimed=null;return null;}
+  EV.jobs.push(job);EV.stats.meds++;notify((group.length>1?'SHOOTING VICTIMS':'MAN DOWN')+' IN '+distName(x,y)+' \u2014 PARAMEDICS EN ROUTE','news',0);return job;}
+// ---------------------------------------------------------------- per-frame
+function endJob(job){if(job.done)return;job.done=true;
+  for(const c of job.cars){if(!cars.includes(c)||!c.ai||c.ai.scene!==job)continue;c.ai.scene=null;
+    if(!inView(c.x,c.y,60)&&c!==player.inCar){cars.splice(cars.indexOf(c),1);continue;}if(c.driver==='ai'){c.ai.mode='traffic';prepUnit(c);c.ai.cruise=rr(70,100);}}
+  for(const p of job.patients)if(p.inj&&livePed(p)&&p.down>100){p.down=.5;p.inj=false;}}
+function tickJob(job,dt){job.t+=dt;
+  job.units=job.units.filter(c=>{if(liveCar(c)&&c.ai.job===job)return true;if(c===job.amb)job.ambGone=true;return false;});
+  job.crew=job.crew.filter(p=>livePed(p)&&(p.off||p.medic));
+  if(job.kind==='crash'){const enr=job.units.some(u=>u.ai.mode==='respond'&&u.type==='police');if(!job.done&&(job.t>70||(job.t>job.dur&&!(enr&&job.t<60)&&(!job.amb||job.ambGone||job.ambDone)))) endJob(job);
+    if(job.cars.every(c=>!cars.includes(c))&&!job.done)endJob(job);}
+  else if(job.kind==='med'){if(!job.done&&(job.t>50||job.ambGone||job.ambDone))endJob(job);}
+  else if(job.kind==='mug')tickMug(job,dt);
+  // dispatcher re-sends a unit if the first one got diverted (not at 4+ stars)
+  if(!job.done&&job.kind!=='med'&&(job.kind==='crash'||job.reported)&&!job.cuffed&&stars<4&&job.t-(job.lastDisp||0)>12&&!job.units.some(u=>u.type==='police')&&job.t<70){job.lastDisp=job.t;dispatchCop(job);}
+  if(!job.done&&Math.hypot(job.x-focus.x,job.y-focus.y)>1700)endJob(job);
+  return!(job.done&&!job.units.length&&!job.crew.length&&job.t>2)&&job.t<240;}
+function tickMug(job,dt){const m=job.mugger,v=job.victim;job.ph+=dt;
+  if(job.done)return;
+  if(!peds.includes(m)){endJob(job);return;}
+  if(m.dead){if(!job.over){job.over=true;job.ph=0;}if(job.ph>4||!job.units.length)endJob(job);return;}
+  if(job.phase==='approach'){if(!livePed(v)||v.state==='flee'||v.down>0||job.ph>14){job.phase='abort';m.kind='ped';m.mug=null;if(v)v.mugV=null;endJob(job);return;}}
+  if(job.phase==='flee'){job.x=m.x;job.y=m.y;
+    if(!job.reported&&job.ph>1.8){job.reported=true;if(R()<.9){EV.stats.mugReported++;const u=dispatchCop(job);notify('MUGGING REPORTED IN '+distName(m.x,m.y)+(u?' \u2014 UNIT RESPONDING':''),'cops',1);}}
+    if(!job.cuffed&&!job.caught&&(job.ph>55||Math.hypot(m.x-focus.x,m.y-focus.y)>1400)){m.kind='ped';m.mug=null;m.state='wander';endJob(job);}}
+  if(job.cuffed){job.cuffT=(job.cuffT||0)+dt;if(job.cuffT>2.5)endJob(job);}}
+function tickIncidents(dt){if(!V4READY)return;
+  EV.jobs=EV.jobs.filter(j=>tickJob(j,dt));
+  if(stars>=4)for(const j of EV.jobs)for(const c of j.units.slice())if(c.driver==='cop')releaseUnit(c,j);
+  if(state!=='play'||interior||EV.off)return;
+  EV.accT-=dt;if(EV.accT<=0){const r=triggerCareless();EV.accT=r?rr(EVCFG.accMin,EVCFG.accMax):12;}
+  EV.mugT-=dt;if(EV.mugT<=0){const j=startMug();EV.mugT=j?rr(EVCFG.mugMin,EVCFG.mugMax):10;}
+  EV.medT-=dt;if(EV.medT<=0){EV.medT=3;if(!EV.jobs.some(j=>j.kind==='med'&&!j.done)&&gtime-(EV.lastMed||-99)>30){
+      const ds=peds.filter(p=>p.dead&&!p.claimed&&p.deadT>4&&p.deadT<25&&Math.hypot(p.x-focus.x,p.y-focus.y)<650);
+      if(ds.length){const p0=ds[0],grp=ds.filter(p=>Math.hypot(p.x-p0.x,p.y-p0.y)<140).slice(0,3);if(startMed(grp))EV.lastMed=gtime;}}}}
+updateWorld=(o=>function(dt){o(dt);tickIncidents(dt);})(updateWorld);
+// ---------------------------------------------------------------- units (cars)
+function unitUpdate(c,dt,o){const ai=c.ai,job=ai.job;
+  if(job.done&&ai.mode==='respond'){finishUnit(c,job);return o(c,dt);}
+  if(c.driver==='cop'){ai.engT=(ai.engT||0)-dt;if(ai.engT<=0){ai.engT=.3;if(copEngage(c.x,c.y)){releaseUnit(c,job);return o(c,dt);}}}
+  if(ai.mode==='respond'){const dest=job.kind==='mug'&&livePed(job.mugger)?job.mugger:job;ai.dest={x:dest.x,y:dest.y};ai.respT+=dt;ai.panic=Math.max(ai.panic||0,.5);
+    const d=Math.hypot(dest.x-c.x,dest.y-c.y);
+    ai.slowT=Math.hypot(c.vx,c.vy)<15?(ai.slowT||0)+dt:0;
+    if(d<(job.kind==='mug'?125:85)||(d<260&&((ai.still||0)>2.5||ai.slowT>1.5))||(job.kind==='mug'&&(d<330||(d<420&&ai.respT>14)))){ai.mode='onscene';ai.arrT=0;if(ai.amb)EV.stats.ambArrive++;else EV.stats.copArrive++;}
+    else{if(ai.respT>22&&!inView(c.x,c.y,80)&&!inView(dest.x,dest.y,80)){const sp=laneSpot(dest.x,dest.y,70,170,true,true);if(sp){c.x=sp.x;c.y=sp.y;c.a=sp.dir*PI/2;c.vx=c.vy=0;ai.dir=sp.dir;prepUnit(c);ai.respT=20;}}
+      const dv=c.driver;ai.mode='traffic';c.driver='ai';o(c,dt);c.driver=dv;if(c.ai){c.ai.mode='respond';if(d<240&&c.vf>45+d*.4)c.th=-1;}return;}}
+  if(ai.mode==='onscene'){ai.arrT+=dt;o(c,dt);if(!c.ai)return;
+    if(!ai.crewOut&&(Math.hypot(c.vx,c.vy)<12||ai.arrT>3)){ai.crewOut=true;const f=Math.cos(c.a),s=Math.sin(c.a);
+      const sides=ai.amb?[1,-1]:[(R()<.5?1:-1)];for(const sd of sides){let x=c.x+s*(c.W/2+7)*sd-f*6,y=c.y-f*(c.W/2+7)*sd-s*6;if(solid(tileW(x,y))){x=c.x-s*(c.W/2+7)*sd;y=c.y+f*(c.W/2+7)*sd;}
+        const p=ai.amb?newMedic(x,y):newOfficer(x,y);p.unit=c;p.job=job;p.task=ai.amb?'treat':(job.kind==='mug'?'chase':'secure');peds.push(p);job.crew.push(p);}sfx('door',c.x,c.y);}
+    if(job.done||(ai.crewOut&&!job.crew.some(p=>p.unit===c)&&ai.arrT>4))finishUnit(c,job);}}
+function finishUnit(c,job){if(job.crew.some(p=>p.unit===c)){for(const p of job.crew)if(p.unit===c)p.task='return';return;}
+  if(c.ai.amb)job.ambDone=true;c.ai.job=null;c.ai.dest=null;c.ai.panic=0;c.ai.mode='traffic';c.ai.crewOut=false;prepUnit(c);c.ai.cruise=rr(100,130);job.units=job.units.filter(u=>u!==c);}
+updateCar=(o=>function(c,dt){const ai=c.ai;
+  if(ai&&ai.job&&(c.driver==='cop'||c.driver==='ai'))return unitUpdate(c,dt,o);
+  o(c,dt);})(updateCar);
+// ---------------------------------------------------------------- crew + muggers (peds)
+function walkTo(p,x,y,spd,dt,stop){const dx=x-p.x,dy=y-p.y,d=Math.hypot(dx,dy);if(d<=(stop||3))return true;let ux=dx/d,uy=dy/d;
+  if(p._sideT>0){p._sideT-=dt;const s=p._side;const nx=-uy*s,ny=ux*s;ux=ux*.3+nx;uy=uy*.3+ny;const l=Math.hypot(ux,uy);ux/=l;uy/=l;}
+  const m=Math.min(d,spd*dt),x0=p.x,y0=p.y;p.x+=ux*m;p.y+=uy*m;p.a=Math.atan2(uy,ux);p.walk+=dt*spd*.2;resolveCircleTiles(p,4);
+  if(Math.hypot(p.x-x0,p.y-y0)<m*.3){p._stk=(p._stk||0)+dt;if(p._stk>.5){p._stk=0;p._sideT=.7;p._side=R()<.5?1:-1;}}else p._stk=0;return false;}
+function crewUpdate(p,dt){const job=p.job,car=p.unit;
+  if(p.off){p.engT=(p.engT||0)-dt;if(p.engT<=0){p.engT=.25;if(copEngage(p.x,p.y)){releaseOfficer(p,job);return false;}}}
+  if(p.down>0)return false;
+  if(p.task==='return'||!job||(job.done&&p.task!=='carry')){if(!liveCar(car)){if(p.off)releaseOfficer(p,job);else{p.medic=false;p.state='wander';if(job)job.crew=job.crew.filter(q=>q!==p);}return false;}
+    if(p.carry&&livePed(p.carry)){p.carry.x=p.x-Math.cos(p.a)*7;p.carry.y=p.y-Math.sin(p.a)*7;}
+    if(walkTo(p,car.x,car.y,55,dt,car.L/2+3)){if(p.carry){const i=peds.indexOf(p.carry);if(i>=0)peds.splice(i,1);p.carry=null;}if(p.escort&&peds.includes(p.escort))peds.splice(peds.indexOf(p.escort),1);
+      const i=peds.indexOf(p);if(i>=0)peds.splice(i,1);if(job)job.crew=job.crew.filter(q=>q!==p);}
+    else if(p.escort&&peds.includes(p.escort)){walkTo(p.escort,p.x-Math.cos(p.a)*9,p.y-Math.sin(p.a)*9,60,dt,2);}
+    return true;}
+  if(p.task==='secure'){if(!p.goal){const s=walkSpot(job.x,job.y,16,34)||{x:job.x,y:job.y};p.goal=s;}
+    if(walkTo(p,p.goal.x,p.goal.y,45,dt,3)){p.a+=angDiff(Math.atan2(job.y-p.y,job.x-p.x),p.a)*Math.min(1,dt*4);p.idleT=(p.idleT||0)+dt;if(p.idleT>4){p.idleT=0;p.goal=null;}}return true;}
+  if(p.task==='chase'){const m=job.mugger;if(!livePed(m)||job.cuffed){if(m&&m.dead&&peds.includes(m)){walkTo(p,m.x,m.y,50,dt,10);}return true;}
+    if(walkTo(p,m.x,m.y,112,dt,9)){job.cuffed=true;job.cuffT=0;m.cuffed=true;m.state='wander';m.down=0;p.escort=m;EV.stats.arrests++;notify('MUGGER ARRESTED','cops',0);}return true;}
+  if(p.task==='treat'){if(!p.pat||!livePat(p.pat)){p.pat=job.patients.find(q=>livePat(q)&&!q.medBy);if(p.pat)p.pat.medBy=p;else{p.task='return';return true;}p.workT=0;}
+    const q=p.pat;if(walkTo(p,q.x,q.y,62,dt,8)){p.workT+=dt;p.a=Math.atan2(q.y-p.y,q.x-p.x);p.walk=0;
+      if(p.workT>3.2){const ok=q.inj||(!q.cop&&R()<.45);job.patients=job.patients.filter(o=>o!==q);
+        if(ok){q.dead=false;q.inj=false;q.hp=22;q.down=0;q.state='flee';q.fx=p.x;q.fy=p.y;q.t=3;q.deadT=0;q.claimed=null;q.medBy=null;notify('PARAMEDICS SAVED A VICTIM','news',0);}
+        else{p.carry=q;q.medBy=p;p.task='return';}p.pat=null;}}
+    return true;}
+  return false;}
+const livePat=q=>q&&peds.includes(q)&&(q.dead||q.inj);
+function muggerUpdate(p,dt,o){const job=p.mug;if(p.cuffed){if(job&&(!job.done||job.crew.some(q=>q.escort===p)))return true;p.cuffed=false;p.kind='ped';p.mug=null;return false;}
+  if(job.done){p.kind='ped';p.mug=null;return false;}
+  if(p.down>0){if(job&&!job.caught&&job.phase==='flee'){job.caught=true;EV.stats.caught++;const v=job.loot;addMoney(v);gainXP(10);notify('YOU STOPPED THE MUGGER  +$'+v,'rep',1);p.down=Math.max(p.down,7);
+      if(!job.units.length)dispatchCop(job);}return false;}
+  if(job.caught){if(!job.units.length&&job.ph>12&&!inView(p.x,p.y,30)){p.kind='ped';p.mug=null;endJob(job);}return true;}
+  const v=job.victim;
+  if(job.phase==='approach'){if(!livePed(v))return false;if(walkTo(p,v.x,v.y,74,dt,9)){job.phase='rob';job.ph=0;v.mugHeld=true;v.a=Math.atan2(p.y-v.y,p.x-v.x);}return true;}
+  if(job.phase==='rob'){p.a=Math.atan2(v.y-p.y,v.x-p.x);p.swingT=.1;if(job.ph>1.4){job.phase='flee';job.ph=0;v.mugHeld=false;v.mugV=null;
+      pickups.push({type:'cash',x:v.x+rr(-8,8),y:v.y+rr(-8,8),t:0,life:20,val:ri(8,25)});v.state='flee';v.fx=p.x;v.fy=p.y;v.t=6;p.cash=job.loot;
+      for(const w of peds)if(w!==v&&w!==p&&!w.dead&&!w.cop&&!w.off&&Math.hypot(w.x-v.x,w.y-v.y)<110&&R()<.6){w.state='flee';w.fx=p.x;w.fy=p.y;w.t=rr(2,4);}}return true;}
+  if(job.phase==='flee'){const cop=job.crew.find(q=>q.task==='chase');const th=cop||((player.active&&!player.inCar&&Math.hypot(player.x-p.x,player.y-p.y)<120)?player:null)||v||p;
+    p.state='flee';p.fx=th.x+(th===p?-5:0);p.fy=th.y;p.t=30;return false;}
+  return false;}
+updatePed=(o=>function(p,dt){if(!p.dead){
+    if((p.off||p.medic)&&p.job){if(crewUpdate(p,dt)){p.shootT-=dt;return;}}
+    else if(p.kind==='mugger'&&p.mug){if(muggerUpdate(p,dt,o))return;if(p.mug&&p.mug.phase==='flee'&&!(p.down>0)){const x0=p.x,y0=p.y;o(p,dt);p.x=x0+(p.x-x0)*.8;p.y=y0+(p.y-y0)*.8;resolveCircleTiles(p,4);return;}}
+    else if(p.mugHeld)return;
+    // panicked pedestrians keep to the sidewalk instead of sprinting into traffic
+    if(p.state==='flee'&&!p.cop&&!p.hostile&&!(p.down>0)&&!(p.dive>0)){const x0=p.x,y0=p.y,t0=tileW(x0,y0);o(p,dt);
+      if(t0!==ROAD&&tileW(p.x,p.y)===ROAD){if(tileW(p.x,y0)!==ROAD)p.y=y0;else if(tileW(x0,p.y)!==ROAD)p.x=x0;else{p.x=x0;p.y=y0;p.fx=2*x0-p.fx+rr(-30,30);p.fy=2*y0-p.fy+rr(-30,30);}}return;}}
+  return o(p,dt);})(updatePed);
+killPed=(o=>function(p,byPlayer){if(p.dead)return;if(p.off&&!p.cop){p.cop=true;p.off=false;}
+  const mj=p.kind==='mugger'&&p.mug;if(mj&&byPlayer){EV.supHeat=2;if(!mj.caught){mj.caught=true;EV.stats.caught++;gainXP(6);notify('MUGGER TAKEN DOWN','rep',1);}if(mj.phase==='flee')p.cash=Math.max(p.cash||0,mj.loot);}
+  o(p,byPlayer);EV.supHeat=0;})(killPed);
+// busy cops do not count as chasers: fewer reinforcements at low heat
+manage=(o=>function(){let busy=0;for(const j of EV.jobs)if(!j.done)for(const c of j.units)if(c.driver==='cop'&&Math.hypot(c.x-focus.x,c.y-focus.y)<1600)busy++;
+  if(busy&&stars>=1&&stars<=3){const k=stars,v=MAXCOPS[k];MAXCOPS[k]=Math.max(k===1?0:1,v-busy);try{o();}finally{MAXCOPS[k]=v;}}else o();})(manage);
+// ---------------------------------------------------------------- drawing
+function drawAmbulance(c){const L=c.L,Wd=c.W,hl=L/2,hw=Wd/2,on=(c.ai&&c.ai.job&&c.ai.mode==='respond')||c===player.inCar,f=Math.floor(gtime*8)%2;g.save();g.translate(c.x,c.y);g.rotate(c.a);
+  g.fillStyle='rgba(0,0,0,.35)';rrect(-hl+2,-hw+2,L,Wd,3);g.fill();g.fillStyle='#111';g.fillRect(hl-10,-hw-1,6,2);g.fillRect(hl-10,hw-1,6,2);g.fillRect(-hl+4,-hw-1,6,2);g.fillRect(-hl+4,hw-1,6,2);
+  g.fillStyle='#f2f2f2';rrect(-hl,-hw,L,Wd,2.5);g.fill();g.fillStyle='#d01818';g.fillRect(-hl+1,-hw,L-2,2);g.fillRect(-hl+1,hw-2,L-2,2);
+  g.fillStyle='#1c2a3a';g.fillRect(hl-9,-hw+2,4,Wd-4);g.fillStyle='#ffffff';g.fillRect(-hl+2,-hw+2.5,L-14,Wd-5);
+  g.fillStyle='#d01818';g.fillRect(-hl+9,-1.6,8,3.2);g.fillRect(-hl+11.4,-4,3.2,8);
+  g.fillStyle=on?(f?'#ff2020':'#ffffff'):'#902020';g.fillRect(hl-13.5,-hw+2,3,hw-2);g.fillStyle=on?(f?'#ffffff':'#ff2020'):'#909090';g.fillRect(hl-13.5,0,3,hw-2);
+  g.fillStyle='#fff8c0';g.fillRect(hl-1.5,-hw+1.5,1.5,3);g.fillRect(hl-1.5,hw-4.5,1.5,3);g.fillStyle=c.braking?'#ff3030':'#8a1010';g.fillRect(-hl,-hw+1.5,1.5,3);g.fillRect(-hl,hw-4.5,1.5,3);
+  if(on){g.globalAlpha=.22;g.fillStyle=f?'#ff3030':'#ffffff';g.beginPath();g.arc(hl-12,0,16,0,TAU);g.fill();g.globalAlpha=1;}
+  const dmg=1-c.hp/c.maxHp;if(dmg>.3){g.fillStyle='rgba(20,10,0,'+(dmg*.45)+')';rrect(-hl,-hw,L,Wd,3);g.fill();}g.restore();}
+drawCar=(o=>function(c){if(EV.showPaths&&c.ai&&c.ai.turn){const tn=c.ai.turn;g.save();g.strokeStyle=tn.wide?'#ff9020':'#40ff70';g.lineWidth=1.6;g.setLineDash([4,3]);g.beginPath();g.arc(tn.C[0],tn.C[1],tn.r,tn.ang0,tn.ang0+tn.s*PI/2,tn.s<0);g.stroke();g.restore();}
+  if(c.type==='ambulance'&&!c.wreck)return drawAmbulance(c);o(c);if(c.wreck)return;const ai=c.ai;
+  if(ai&&ai.job&&c.type==='police'&&ai.mode!=='chase'){const f=Math.floor(gtime*8)%2;g.save();g.translate(c.x,c.y);g.rotate(c.a);const hw=c.W/2;
+    g.fillStyle=f?'#ff2020':'#601010';g.fillRect(-3,-hw+2,4,hw-2);g.fillStyle=f?'#202060':'#3050ff';g.fillRect(-3,0,4,hw-2);g.globalAlpha=.25;g.fillStyle=f?'#ff3030':'#3060ff';g.beginPath();g.arc(-1,0,14,0,TAU);g.fill();g.globalAlpha=1;g.restore();}
+  if(ai&&ai.scene&&Math.floor(gtime*2.5)%2){g.save();g.translate(c.x,c.y);g.rotate(c.a);const hl=c.L/2,hw=c.W/2;g.fillStyle='#ffb020';for(const [x,y] of[[hl-2,-hw],[hl-2,hw-2],[-hl,-hw],[-hl,hw-2]])g.fillRect(x,y,2.5,2.5);
+    g.globalAlpha=.18;g.beginPath();g.arc(0,0,c.L*.6,0,TAU);g.fill();g.globalAlpha=1;g.restore();}})(drawCar);
+drawPed=(o=>function(p,G){o(p,G);G=G||g;
+  if(p.mugHeld||(p.kind==='mugger'&&p.mug&&p.mug.phase==='rob')){if(!p.mugHeld)return;G.save();G.fillStyle='#ff3030';G.font='bold 10px '+FONT;G.textAlign='center';G.fillText('!',p.x,p.y-9+Math.sin(gtime*10));G.restore();}
+  else if(p.medic&&p.pat&&p.workT>0){G.save();G.globalAlpha=.6+.4*Math.sin(gtime*8);G.fillStyle='#fff';G.fillRect(p.x-3,p.y-14,6,6);G.fillStyle='#e02020';G.fillRect(p.x-.9,p.y-13.5,1.8,5);G.fillRect(p.x-2.5,p.y-11.9,5,1.8);G.restore();}
+  else if(p.kind==='mugger'&&p.mug&&p.mug.phase==='flee'&&!p.cuffed&&!p.dead&&!(p.down>0)){const b=Math.sin(gtime*8)*1.2;G.save();G.globalAlpha=.85;G.fillStyle='#ff3030';G.beginPath();G.moveTo(p.x-3.5,p.y-15+b);G.lineTo(p.x+3.5,p.y-15+b);G.lineTo(p.x,p.y-10+b);G.closePath();G.fill();
+    G.font='bold 6px '+FONT;G.textAlign='center';G.fillText('THIEF',p.x,p.y-17+b);G.restore();}
+  else if(p.cuffed&&!p.dead){G.save();G.fillStyle='#9cf';G.fillRect(p.x-2,p.y-10,4,2);G.restore();}})(drawPed);
+// ---------------------------------------------------------------- reset + debug
+function evReset(){EV.jobs=[];EV.accT=70;EV.mugT=85;EV.lastCrash=-99;EV.lastMed=-99;EV.lastCrime=null;for(const k in EV.stats)EV.stats[k]=0;}
+startGame=(o=>function(){evReset();return o.apply(this,arguments);})(startGame);
+window.__game.ev={EV,reset:evReset,EVCFG,startCrash,startMug,startMed,triggerCareless,dispatchCop,dispatchAmb,mkTurn,laneSpot,
+  forceCrash:(minD)=>{const cs=cars.filter(c=>c.driver==='ai'&&c.ai&&c.ai.mode==='traffic'&&c.type!=='ambulance'&&sceneFree(c)&&Math.hypot(c.x-focus.x,c.y-focus.y)>=(minD||0)).sort((a,b)=>Math.hypot(a.x-focus.x,a.y-focus.y)-Math.hypot(b.x-focus.x,b.y-focus.y));
+    if(cs.length<2)return null;const a=cs[0],b=cs[1];b.x=a.x+Math.cos(a.a)*(a.L/2+b.L/2-4);b.y=a.y+Math.sin(a.a)*(a.L/2+b.L/2-4);EV.lastCrash=-99;return startCrash(a,b,true);}};
 
 </script></body></html>
