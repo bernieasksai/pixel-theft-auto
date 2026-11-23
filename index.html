@@ -4592,4 +4592,175 @@ phoneView=(o=>function(){if(phone.app==='standing')return r7View();return o();})
 startGame=(o=>function(){V7.task=null;V7.offers=null;V7.offerT=30;V7.turf=null;V7.lastCaught=0;V7.cd={};for(const k in V7.stats)V7.stats[k]=0;const r=o.apply(this,arguments);V7.lastCaught=typeof EV!=='undefined'?EV.stats.caught:0;return r;})(startGame);
 window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get rep(){return{V7,GW7,GANGS7,GRT7,RP,gwAdd,gAdd,gwTier,gwName,gTier,turf7,noShoot7,r7MakeOffers,r7Accept,r7Done,r7Cancel,r7View,r7GangMember,gwPerks};}}));
 
+// ======================================================================
+//  v6t: HIDDEN TOKENS - 56 spinning gold tokens tucked all over Miami
+//  (alleys, tucked corners, parks, dock ends, beside the causeways,
+//  the beach, open water by boat, a few short swims). GTA2-style
+//  milestone rewards every 5 tokens + a 56/56 finale, per-district
+//  completion bonuses, PHONE > TOKENS app. Saved in career.tok.
+// ======================================================================
+const TOK8_TOTAL=56;
+const TOK8_PLAN=[
+  ['DOWNTOWN',['alley','corner','alley','park','corner','alley']],
+  ['OLD TOWN',['alley','corner','park','alley','corner']],
+  ['INDUSTRIAL',['lot','alley','corner','lot','alley']],
+  ['RIVERSIDE',['park','alley','river','corner','alley']],
+  ['PIXEL COUNTY',['field','field','field','corner','park','field']],
+  ['BAYSIDE',['alley','corner','park','shore']],
+  ['MARINA',['dock','dock','corner']],
+  ['SOUTH BEACH',['alley','corner','shore','causeway']],
+  ['OCEAN DRIVE',['dock','beach','corner']],
+  ['SOUTH BEACH SANDS',['beach','beach','swim','beach']],
+  ['PORT OF MIAMI',['lot','lot','corner','dock','alley']],
+  ['BISCAYNE BAY',['causeway','causeway','boat','dock']],
+  ['ATLANTIC OCEAN',['boat','swim']]];
+const TOK8_HINT={alley:'alleys',corner:'corners',park:'parks',lot:'lots',field:'fields',river:'riverbank',shore:'waterfront',dock:'dock ends',beach:'the beach',causeway:'causeway',swim:'swim out',boat:'open water'};
+const TOK8_WATER={causeway:1,swim:1,boat:1};
+const TOK8_MS=[
+  {n:5,name:'$1,000 cash',sub:'Paid on the spot',sub2:'',fn:()=>addMoney(1000)},
+  {n:10,name:'Weapon stash at home',sub:'Uzi, shotgun, health',sub2:'At YOUR PLACE, refills every 10 min',fn:()=>{TKR().stashCd=0;}},
+  {n:15,name:'+15 max health',sub:'Permanent',sub2:'Stacks with your skill points',fn:()=>{player.hp=hpMax();}},
+  {n:20,name:'Cops + gangs warm up',sub:'+10 cop goodwill',sub2:'+10 respect with every gang',fn:()=>{gwAdd(10,'TOKEN REWARD');for(const g of GANGS7)gAdd(g.id,10,'TOKEN REWARD',true);}},
+  {n:25,name:'Respawn with armor',sub:'50 armor every life',sub2:'Plus full armor right now',fn:()=>{player.armor=100;}},
+  {n:30,name:'Golden sports car',sub:'Outside YOUR PLACE',sub2:'Fully upgraded; returns if wrecked',fn:()=>{}},
+  {n:35,name:'Bigger stash + lungs',sub:'Rifle + armor in stash',sub2:'Hold your breath twice as long',fn:()=>{TKR().stashCd=0;}},
+  {n:40,name:'Golden speedboat',sub:'At the Marina docks',sub2:'Returns to the Marina if lost',fn:()=>{}},
+  {n:45,name:'$10,000 cash',sub:'Paid on the spot',sub2:'',fn:()=>addMoney(10000)},
+  {n:50,name:'Stars fade faster',sub:'Wanted cools 25% faster',sub2:'Permanent',fn:()=>{}},
+  {n:56,name:'TOKEN MASTER',sub:'$50,000 + fireworks',sub2:'Plus +25 health, armor, goodwill',fn:()=>tokFinale()}];
+const TK8={list:null,byKey:{},dist:[],banner:null,fx:[],stats:{picked:0,ms:0,dc:0,stash:0,car:0,boat:0},near:1e9,nearK:null,tickT:0,stash:null};
+if(typeof NCAT!=='undefined')NCAT.tok={c:'#ffd23a',g:'\u25c6',n:'TOKEN'};
+function TKR(){let R=career.tok;if(!R||typeof R!=='object')R=career.tok={got:{},ms:{},dc:{},stashCd:0};R.got=R.got||{};R.ms=R.ms||{};R.dc=R.dc||{};if(typeof R.stashCd!=='number')R.stashCd=0;return R;}
+function tokPretty(n){return String(n).toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()).replace(/ Of /g,' of ');}
+// ---------------------------------------------------------------- placement (deterministic, built once from the map)
+function tokBuild(){if(TK8.list)return TK8.list;const rnd=mulberry32(5656),NN=N*N,INF=1e9,BR=i=>!!(BRIDGE5&&BRIDGE5[i]);
+  const bfs=seed=>{const d=new Int32Array(NN).fill(INF),q=new Int32Array(NN);let h=0,t=0;for(let i=0;i<NN;i++)if(seed(i)){d[i]=0;q[t++]=i;}
+    while(h<t){const i=q[h++],x=i%N,nd=d[i]+1;if(x>0&&d[i-1]>nd){d[i-1]=nd;q[t++]=i-1;}if(x<N-1&&d[i+1]>nd){d[i+1]=nd;q[t++]=i+1;}if(i>=N&&d[i-N]>nd){d[i-N]=nd;q[t++]=i-N;}if(i<NN-N&&d[i+N]>nd){d[i+N]=nd;q[t++]=i+N;}}return d;};
+  const LANDOK=new Set([SIDE,GRASS,LOT,ALLEY,SAND,DOCK,FIELD,DIRT]),WALK=new Set([ROAD,SIDE,GRASS,LOT,ALLEY,SAND,DOCK,FIELD,DIRT]);
+  const dRoad=bfs(i=>map[i]===ROAD),dLand=bfs(i=>map[i]!==SEA),dWalk=bfs(i=>WALK.has(map[i])&&!BR(i)),dSea=bfs(i=>map[i]===SEA);
+  const at=(x,y)=>(x<0||y<0||x>=N||y>=N)?BLD:map[y*N+x];const n4=(x,y,f)=>(f(at(x-1,y))?1:0)+(f(at(x+1,y))?1:0)+(f(at(x,y-1))?1:0)+(f(at(x,y+1))?1:0);
+  const brN=(x,y)=>{for(const [a,b] of[[1,0],[-1,0],[0,1],[0,-1]]){const xx=x+a,yy=y+b;if(xx>=0&&yy>=0&&xx<N&&yy<N&&BR(yy*N+xx))return true;}return false;};
+  const sx=5*P-1,sy=4*P+6,bad=[];for(const o of pois){if(o.spot)bad.push(o.spot);if(o.door)bad.push(o.door);}if(typeof atms!=='undefined')for(const a of atms)bad.push(a);
+  const names=DISTRICTS.map(d=>d.name),cand={};for(const k in TOK8_HINT)cand[k]=[];
+  for(let ty=2;ty<N-2;ty++)for(let tx=2;tx<N-2;tx++){const i=ty*N+tx,t=map[i];if(BR(i))continue;const x=tx*T+T/2,y=ty*T+T/2;
+    if((tx-sx)**2+(ty-sy)**2<49)continue;let ks=[];
+    if(t===SEA){if(brN(tx,ty))ks.push('causeway');else{if(dWalk[i]>=2&&dWalk[i]<=4)ks.push('swim');if(dLand[i]>=7)ks.push('boat');}}
+    else if(LANDOK.has(t)){let ok=true;for(const b of bad)if(Math.abs(b.x-x)<56&&Math.abs(b.y-y)<56){ok=false;break;}
+      if(ok)for(const tr of trees)if(Math.abs(tr.x-x)<tr.r+10&&Math.abs(tr.y-y)<tr.r+10){ok=false;break;}if(!ok)continue;
+      const isB=v=>v===BLD;const cornerB=(isB(at(tx-1,ty))||isB(at(tx+1,ty)))&&(isB(at(tx,ty-1))||isB(at(tx,ty+1)));
+      if(t===ALLEY&&n4(tx,ty,isB)>=2&&dRoad[i]>=2)ks.push('alley');
+      {let n8=0;for(let a=-1;a<=1;a++)for(let c=-1;c<=1;c++)if((a||c)&&isB(at(tx+a,ty+c)))n8++;if((t===GRASS||t===LOT||t===ALLEY||t===SIDE)&&dRoad[i]>=2&&(cornerB||n8>=5))ks.push('corner');}
+      if(t===GRASS&&dRoad[i]>=3&&n4(tx,ty,v=>v===GRASS)===4)ks.push('park');
+      if(t===LOT&&n4(tx,ty,isB)>=1&&dRoad[i]>=2)ks.push('lot');
+      if((t===FIELD||t===DIRT)&&dRoad[i]>=4)ks.push('field');
+      if((t===GRASS||t===SIDE||t===ALLEY)&&n4(tx,ty,v=>v===WATER)>=1)ks.push('river');
+      if(t!==DOCK&&t!==SAND&&n4(tx,ty,v=>v===SEA)>=1)ks.push('shore');
+      if(t===DOCK&&n4(tx,ty,v=>v===SEA)>=2&&n4(tx,ty,v=>v===DOCK)<=1)ks.push('dock');
+      if(t===SAND&&dSea[i]>=1&&dSea[i]<=3)ks.push('beach');}
+    if(!ks.length)continue;const dn=names[distAt5(x,y)];for(const k of ks)cand[k].push({i,tx,ty,x,y,dn,k});}
+  const picked=[],far=(c,m)=>{for(const p of picked)if((p.tx-c.tx)**2+(p.ty-c.ty)**2<m*m)return false;return true;};
+  const ORDER=['corner','alley','park','lot','shore','beach','dock','field','river','swim','boat','causeway'];
+  for(const [dn,kinds] of TOK8_PLAN)for(const k of kinds){let c=null;
+    for(const m of[10,7,4]){let L=cand[k].filter(q=>q.dn===dn&&far(q,m));if(!L.length)for(const k2 of ORDER){L=cand[k2].filter(q=>q.dn===dn&&far(q,m));if(L.length)break;}
+      if(L.length){c=L[Math.floor(rnd()*L.length)];break;}}
+    if(c)picked.push(c);}
+  TK8.list=picked.map((c,j)=>({id:j,key:c.tx+','+c.ty,x:c.x,y:c.y,tx:c.tx,ty:c.ty,dn:c.dn,kind:c.k,water:!!TOK8_WATER[c.k],ph:rnd()*6.28}));
+  TK8.cand={};for(const k in cand)TK8.cand[k]=cand[k].length;TK8.byKey={};for(const k of TK8.list)TK8.byKey[k.key]=k;
+  TK8.dist=TOK8_PLAN.map(([dn])=>({dn,toks:TK8.list.filter(k=>k.dn===dn)})).filter(d=>d.toks.length);return TK8.list;}
+function tokHas(k){return !!TKR().got[k.key];}
+function tokCount(){const R=TKR();let n=0;for(const k of tokBuild())if(R.got[k.key])n++;return n;}
+function tokDist(dn){const d=TK8.dist.find(q=>q.dn===dn);if(!d)return{got:0,tot:0,toks:[]};return{got:d.toks.filter(tokHas).length,tot:d.toks.length,toks:d.toks};}
+function tokNextMs(n){return TOK8_MS.find(m=>m.n>(n==null?tokCount():n))||null;}
+function tokMs(n){return !!TKR().ms[n];}
+// ---------------------------------------------------------------- pickup, banner, chime, milestones
+function tokChime(big){try{const N0=big?[523,659,784,1047,1319]:[784,988,1175,1568];N0.forEach((f,i)=>setTimeout(()=>{sTone(f,f*1.01,.22,.16,'triangle');sTone(f*2,f*2,.12,.05,'square');},i*70));}catch(e){}}
+function tokTake(k){const R=TKR();if(R.got[k.key])return false;R.got[k.key]=1;TK8.stats.picked++;const n=tokCount(),D=tokDist(k.dn);
+  TK8.banner={t:3.4,T:3.4,n,dn:k.dn,dg:D.got,dt:D.tot,extra:[]};tokChime(false);TK8.fx.push({x:k.x,y:k.y,t:0,k:'burst'});
+  notify('HIDDEN TOKEN '+n+'/'+TOK8_TOTAL+'  \u2014  '+k.dn+' '+D.got+'/'+D.tot,'tok',2,{col:'#ffd23a'});
+  if(D.got===D.tot&&!R.dc[k.dn]){R.dc[k.dn]=1;TK8.stats.dc++;const b=250*D.tot;addMoney(b);TK8.banner.extra.push(['DISTRICT COMPLETE  +$'+b.toLocaleString('en-US'),'#8f8']);
+    notify('ALL TOKENS IN '+k.dn+' FOUND  \u2014  BONUS $'+b.toLocaleString('en-US'),'tok',2,{col:'#8f8'});}
+  for(const m of TOK8_MS)if(n>=m.n&&!R.ms[m.n]){R.ms[m.n]=1;TK8.stats.ms++;try{m.fn();}catch(e){}TK8.banner.extra.push(['UNLOCKED: '+m.name,'#ffd23a']);
+    notify('TOKEN REWARD ('+m.n+'): '+m.name.toUpperCase()+(m.sub?'  \u2014  '+m.sub:''),'tok',2,{col:'#ffd23a'});if(m.n<TOK8_TOTAL)setTimeout(()=>tokChime(true),420);}
+  if(TK8.banner.extra.length)TK8.banner.t=TK8.banner.T=4.6;saveT=Math.min(saveT,1);return true;}
+function tokFinale(){addMoney(50000);player.armor=100;player.hp=hpMax();gwAdd(25,'TOKEN MASTER');for(const g of GANGS7)gAdd(g.id,25,'TOKEN MASTER',true);
+  TK8.fx.push({k:'fireworks',t:0,x:player.x,y:player.y});tokChime(true);setTimeout(()=>tokChime(true),500);msg('TOKEN MASTER! ALL '+TOK8_TOTAL+' HIDDEN TOKENS FOUND','#ffd23a',5);}
+// ---------------------------------------------------------------- perks
+hpMax=(o=>function(){const R=career&&career.tok;let b=0;if(R&&R.ms){if(R.ms[15])b+=15;if(R.ms[56])b+=25;}return o()+b;})(hpMax);
+respawn=(o=>function(){const r=o.apply(this,arguments);const R=TKR();if(R.ms[56])player.armor=100;else if(R.ms[25])player.armor=Math.max(player.armor||0,50);return r;})(respawn);
+function tokHome(){try{return nearestPOI('home',player.x,player.y);}catch(e){return null;}}
+function tokStashPos(){const h=tokHome();if(!h)return null;if(TK8.stash&&TK8.stash.h===h)return TK8.stash;const s=h.spot;let b=null,bd=1e9;
+  for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++){const tx=Math.floor(s.x/T)+dx,ty=Math.floor(s.y/T)+dy,t=tileAt(tx,ty);if(t!==SIDE&&t!==GRASS&&t!==LOT&&t!==ALLEY)continue;
+    const x=tx*T+T/2,y=ty*T+T/2,d=Math.hypot(x-s.x,y-s.y);if(d<40)continue;if(o_poiNear(x,y,h))continue;if(d<bd){bd=d;b={x,y};}}
+  TK8.stash=b?{h,x:b.x,y:b.y}:null;return TK8.stash;}
+function o_poiNear(x,y,h){for(const o of pois){if(o===h)continue;if(o.spot&&Math.abs(o.spot.x-x)<40&&Math.abs(o.spot.y-y)<40)return true;}return false;}
+function tokGold(c){c.color='#d9a514';c.roof='#ffe27a';c.dark='#8a6200';c.tok8Gold=true;}
+function tokCarTick(){const R=TKR();
+  if(R.ms[30]&&!cars.some(c=>c.tok8Car&&!c.wreck)){const h=tokHome();if(h&&Math.hypot(h.spot.x-focus.x,h.spot.y-focus.y)<1000&&typeof W4!=='undefined'){let b=null,bd=1e9;
+      for(const st of W4.stalls){if(st.kind!=='curb'||st.res)continue;const oc=st.car;if(oc&&(oc===player.inCar||!oc.rest||oc.everPlayer||inView(st.x,st.y,40)))continue;
+        const d=Math.hypot(st.x-h.spot.x,st.y-h.spot.y)+(oc?150:0);if(d<bd&&d<750&&(oc||!carNear(st.x,st.y,24))){bd=d;b=st;}}
+      if(b){if(b.car){const oc=b.car,i=cars.indexOf(oc);if(i>=0)cars.splice(i,1);b.car=null;oc.curb=null;b.occ=false;}const c=makeCar('sport',b.x,b.y,b.a);tokGold(c);Object.assign(c.up,{eng:3,brk:2,arm:3,tire:2,bpt:1});applyUpgrades(c);c.hp=c.maxHp;c.keep=true;c.everPlayer=true;c.stolen=false;c.tok8Car=true;cars.push(c);TK8.stats.car++;}}}
+  if(R.ms[40]&&!cars.some(c=>c.tok8Boat&&!c.wreck&&!c._gone)&&typeof M5!=='undefined'){const ms=M5.moor.filter(m=>m.zone==='marina'&&m.kind!=='police');
+    const m=ms.find(m=>Math.hypot(m.x-focus.x,m.y-focus.y)<1500&&!inView(m.x,m.y,80)&&!(m.c&&m.c===player.inCar));
+    if(m){if(m.c&&cars.includes(m.c))m.c._gone=true;cars=cars.filter(c=>!c._gone||c===player.inCar);const c=makeBoat('speedboat',m.x,m.y,m.a);tokGold(c);c.everPlayer=true;c.keep=true;c.tok8Boat=true;c.moor=m;m.c=c;m.spawned=true;cars.push(c);TK8.stats.boat++;}}}
+// ---------------------------------------------------------------- per-frame
+function tokTick(dt){const L=tokBuild(),R=TKR(),p=player;if(TK8.banner){TK8.banner.t-=dt;if(TK8.banner.t<=0)TK8.banner=null;}
+  for(let i=TK8.fx.length-1;i>=0;i--){const f=TK8.fx[i];f.t+=dt;if(f.t>(f.k==='fireworks'?7:1))TK8.fx.splice(i,1);}
+  if(state!=='play'||interior)return;const tg=p.inCar||p;if(!p.active&&!p.inCar)return;const rr=p.inCar?26:18;let nd=1e9,nk=null;
+  for(const k of L){if(R.got[k.key])continue;const d=Math.hypot(k.x-tg.x,k.y-tg.y);if(d<nd){nd=d;nk=k;}if(d<rr)tokTake(k);}
+  TK8.near=nd;TK8.nearK=nk;
+  if(R.ms[35]&&p.swim&&!p.inCar&&p.breath!=null)p.breath=Math.min(1,p.breath+dt/56);
+  if(R.ms[50]&&lastSeen>5&&heat>0)heat=Math.max(0,heat-(stars>=4?22:32)*.25*dt);
+  if(R.ms[10]){if(R.stashCd>0)R.stashCd=Math.max(0,R.stashCd-dt);const s=tokStashPos();
+    if(s&&R.stashCd<=0&&!p.inCar&&Math.hypot(s.x-p.x,s.y-p.y)<20){R.stashCd=600;TK8.stats.stash++;p.ammo[4]+=120;p.ammo[5]+=24;p.hp=hpMax();let t='STASH: UZI +120, SHOTGUN +24, HEALTH';
+      if(R.ms[35]){p.ammo[6]+=12;p.armor=100;t+=', RIFLE +12, ARMOR';}if(p.wp<3)p.wp=4;msg(t,'#ffd23a',2.6);sfx('pick');saveT=Math.min(saveT,1);}}
+  TK8.tickT-=dt;if(TK8.tickT<=0){TK8.tickT=1;try{tokCarTick();}catch(e){}}}
+update=(o=>function(dt){o(dt);try{tokTick(dt);}catch(e){if(!TK8.err){TK8.err=String(e);console.error(e);}}})(update);
+// ---------------------------------------------------------------- drawing
+function drawTok8(k){g.save();g.translate(k.x,k.y);g.scale(1.4,1.4);g.translate(-k.x,-k.y);drawTok8b(k);g.restore();}
+function drawTok8b(k){const t=gtime,sp=Math.cos(t*3.2+k.ph),w=Math.max(.12,Math.abs(sp)),bob=Math.sin(t*2.6+k.ph)*1.8,x=k.x,y=k.y-5+bob,r=8.5;
+  g.fillStyle='rgba(0,0,0,.33)';g.beginPath();g.ellipse(k.x+2,k.y+5,6.5,2.6,0,0,TAU);g.fill();
+  const gl=g.createRadialGradient(x,y,1,x,y,21);gl.addColorStop(0,'rgba(255,225,90,.55)');gl.addColorStop(1,'rgba(255,225,90,0)');g.fillStyle=gl;g.beginPath();g.arc(x,y,21,0,TAU);g.fill();
+  g.fillStyle='#7a4c00';g.beginPath();g.ellipse(x+(sp<0?-1.4:1.4)*(1-w),y,r*w+1.3,r+.6,0,0,TAU);g.fill();
+  g.fillStyle=sp>0?'#ffd23a':'#f2b21c';g.beginPath();g.ellipse(x,y,r*w,r,0,0,TAU);g.fill();g.strokeStyle='#4a2c00';g.lineWidth=1;g.stroke();
+  if(w>.3){g.save();g.translate(x,y);g.scale(w,1);g.fillStyle='rgba(255,255,255,.35)';g.beginPath();g.arc(-2.5,-2.5,3.2,0,TAU);g.fill();g.fillStyle=sp>0?'#fff4b0':'#ffe680';drawStarPath(g,0,.5,5.2);g.fill();g.restore();}
+  for(let i=0;i<3;i++){const a=t*1.7+i*2.09+k.ph,rr=13+2*Math.sin(t*4+i),sx=x+Math.cos(a)*rr,sy=y+Math.sin(a)*rr*.75,s=1.2+1.8*Math.max(0,Math.sin(t*5+i*1.7));
+    g.fillStyle='#fff';g.fillRect(sx-s,sy-.5,2*s,1);g.fillRect(sx-.5,sy-s,1,2*s);}}
+function drawStash8(s,ready){g.save();g.translate(s.x,s.y);g.scale(1.4,1.4);g.translate(-s.x,-s.y);drawStash8b(s,ready);g.restore();}
+function drawStash8b(s,ready){const x=s.x,y=s.y;g.fillStyle='rgba(0,0,0,.35)';g.fillRect(x-9,y-4,20,12);g.fillStyle=ready?'#6a4a20':'#3a3028';g.fillRect(x-10,y-8,20,14);
+  g.fillStyle=ready?'#ffd23a':'#776';g.fillRect(x-10,y-8,20,2);g.fillRect(x-10,y+4,20,2);g.fillRect(x-1.5,y-8,3,14);
+  if(ready){const a=.5+.5*Math.sin(gtime*4);g.strokeStyle='rgba(255,220,80,'+a+')';g.lineWidth=1.2;g.strokeRect(x-12,y-10,24,18);}}
+drawWorldOverlays=(o=>function(){o();if(interior)return;try{setWorld(0);const R=TKR();for(const k of tokBuild())if(!R.got[k.key]&&inView(k.x,k.y,30))drawTok8(k);
+  if(R.ms[10]){const s=tokStashPos();if(s&&inView(s.x,s.y,30))drawStash8(s,R.stashCd<=0);}
+  for(const f of TK8.fx){if(f.k==='burst'){const a=1-f.t;g.strokeStyle='rgba(255,220,80,'+a+')';g.lineWidth=2;g.beginPath();g.arc(f.x,f.y-5,6+f.t*34,0,TAU);g.stroke();
+      for(let i=0;i<10;i++){const an=i*TAU/10,d=8+f.t*40;g.fillStyle='rgba(255,255,220,'+a+')';g.fillRect(f.x+Math.cos(an)*d-1.2,f.y-5+Math.sin(an)*d-1.2,2.4,2.4);}}
+    else{const tg=player.inCar||player,cols=['#ff4060','#40ff90','#40c0ff','#ffd23a','#ff60ff'];for(let b=0;b<7;b++){const st=b*.85,lt=f.t-st;if(lt<0||lt>1.4)continue;
+      const cx=tg.x+Math.cos(b*2.4)*90,cy=tg.y+Math.sin(b*1.7)*70-20,a=1-lt/1.4;g.fillStyle=cols[b%5];g.globalAlpha=a;
+      for(let i=0;i<16;i++){const an=i*TAU/16,d=lt*60;g.fillRect(cx+Math.cos(an)*d-1.5,cy+Math.sin(an)*d+lt*lt*12-1.5,3,3);}g.globalAlpha=1;}}}}catch(e){}})(drawWorldOverlays);
+drawMiniFish6=(o=>function(M,u,mx0,my0,mw,mh){o(M,u,mx0,my0,mw,mh);try{const R=TKR();for(const k of tokBuild()){if(!R.got[k.key])continue;const [x,y]=M(k.x,k.y);if(x<mx0-5||x>mx0+mw+5||y<my0-5||y>my0+mh+5)continue;
+    ctx.fillStyle='#000';ctx.beginPath();ctx.moveTo(x,y-4*u);ctx.lineTo(x+4*u,y);ctx.lineTo(x,y+4*u);ctx.lineTo(x-4*u,y);ctx.closePath();ctx.fill();ctx.fillStyle='#ffd23a';ctx.beginPath();ctx.moveTo(x,y-2.6*u);ctx.lineTo(x+2.6*u,y);ctx.lineTo(x,y+2.6*u);ctx.lineTo(x-2.6*u,y);ctx.closePath();ctx.fill();}
+  if(TK8.near<300&&state==='play'){const ph=(rtNow()*1.4)%1,cx=mx0+mw/2,cy=my0+mh/2,a=(1-TK8.near/300)*.8*(1-ph);ctx.strokeStyle='rgba(255,215,60,'+a+')';ctx.lineWidth=2.5*u;ctx.beginPath();ctx.arc(cx,cy,(6+ph*26)*u,0,TAU);ctx.stroke();}}catch(e){}})(drawMiniFish6);
+drawHUD=(o=>function(){o();const b=TK8.banner;if(!b||state!=='play'||interior||menu||phone.open||fade)return;try{const u=U*(TOUCHUI?1.15:1),k=b.T-b.t,pop=k<.18?.6+.4*(k/.18)*1.1:k<.3?1.04:1,al=Math.min(1,b.t/.4);
+  ctx.save();ctx.globalAlpha=al;ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';const main='HIDDEN TOKEN '+b.n+'/'+TOK8_TOTAL,sub=b.dn+'  '+b.dg+'/'+b.dt;
+  let fs=Math.round(46*u);ctx.font='bold '+fs+'px '+FONT;while(ctx.measureText(main).width>W*.86&&fs>14){fs--;ctx.font='bold '+fs+'px '+FONT;}
+  let f2=Math.round(24*u);ctx.font='bold '+f2+'px '+FONT;const lines=[[sub,'#fff']].concat(b.extra);for(const l of lines)while(ctx.measureText(l[0]).width>W*.86&&f2>11){f2--;ctx.font='bold '+f2+'px '+FONT;}
+  const cy=H*.3,h=fs*1.25+lines.length*f2*1.35+18*u;ctx.font='bold '+fs+'px '+FONT;let bw=ctx.measureText(main).width;ctx.font='bold '+f2+'px '+FONT;for(const l of lines)bw=Math.max(bw,ctx.measureText(l[0]).width);bw=Math.min(W*.94,bw+48*u);
+  ctx.translate(W/2,cy);ctx.scale(pop,pop);ctx.fillStyle='rgba(10,8,0,.78)';ctx.strokeStyle='#ffd23a';ctx.lineWidth=3*u;ctx.beginPath();ctx.roundRect?ctx.roundRect(-bw/2,-h/2,bw,h,12*u):ctx.rect(-bw/2,-h/2,bw,h);ctx.fill();ctx.stroke();
+  let y=-h/2+9*u+fs*.62;ctx.font='bold '+fs+'px '+FONT;outline(main,0,y,'#ffd23a',6*u);y+=fs*.62+f2*.75;ctx.font='bold '+f2+'px '+FONT;for(const l of lines){outline(l[0],0,y,l[1],4*u);y+=f2*1.35;}
+  ctx.restore();}catch(e){}})(drawHUD);
+// ---------------------------------------------------------------- phone app
+{const si=APPS.findIndex(a=>a.id==='system');APPS.splice(si<0?APPS.length:si,0,{id:'tokens',name:'TOKENS',col:'#d8a010',g:'\u25c6'});}
+function tokView(){const v={title:'TOKENS',lines:[],items:[],foot:[],cards:true},R=TKR(),n=tokCount(),nm=tokNextMs(n),J='  \u2022  ';tokBuild();
+  v.items.push({label:'TOKENS FOUND  '+n+' / '+TOK8_TOTAL,right:'',sub:nm?'Next reward at '+nm.n+': '+(nm.n-n)+' to go':'All rewards unlocked!',bar:{v:n/TOK8_TOTAL,c:'#ffd23a'},col:'#ffd23a',act:()=>{}});
+  if(nm)v.items.push({label:'NEXT: '+nm.n+' TOKENS',right:'',col:'#ffd23a',sub:nm.name,sub2:nm.sub,act:()=>{}});
+  if(R.ms[10]){const rd=R.stashCd<=0;v.items.push({label:'HOME STASH',right:rd?'READY':'WAIT',rcol:rd?'#9f9':'#fc8',sub:rd?'Walk over the crate':'Refills in '+Math.ceil(R.stashCd/60)+' min',sub2:'Select for GPS to YOUR PLACE',act:()=>{const h=tokHome();if(h){gps={type:'home',label:'YOUR PLACE'};msg('GPS SET: YOUR PLACE','#8cf',1.6);}}});}
+  for(const d of TK8.dist){const D=tokDist(d.dn),done=D.got===D.tot,left=[...new Set(D.toks.filter(k=>!tokHas(k)).map(k=>TOK8_HINT[k.kind]))].slice(0,2);
+    v.items.push({label:tokPretty(d.dn)+'  '+D.got+'/'+D.tot,right:done?'DONE':'',rcol:'#9f9',col:done?'#60e070':null,sub:done?'Bonus paid: $'+(250*D.tot).toLocaleString('en-US'):'Look: '+left.join(', '),bar:{v:D.got/D.tot,c:done?'#60e070':'#ffd23a'},act:()=>{}});}
+  for(const m of TOK8_MS){const got=!!R.ms[m.n];v.items.push({label:m.name,right:got?'GOT':'AT '+m.n,rcol:got?'#9f9':'#ffd23a',col:got?'#ffd23a':null,dis:!got,sub:m.sub,sub2:m.sub2||(got?'Unlocked':m.n+' tokens'),act:()=>{}});}
+  if(!TOUCHUI)v.foot.push('Tokens spin and sparkle.','The minimap pulses gold','when one is close.');return v;}
+phoneView=(o=>function(){if(phone.app==='tokens')return tokView();return o();})(phoneView);
+startGame=(o=>function(){TK8.banner=null;TK8.fx=[];TK8.near=1e9;TK8.stash=null;for(const k in TK8.stats)TK8.stats[k]=0;return o.apply(this,arguments);})(startGame);
+window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get tok(){return{TK8,TOK8_MS,TOK8_PLAN,TOK8_TOTAL,TKR,tokBuild,tokTake,tokCount,tokDist,tokNextMs,tokView,tokStashPos,tokHome,tokCarTick};}}));
+drawCar=(o=>function(c){o(c);if(!c.tok8Gold||c.wreck)return;try{g.save();g.translate(c.x,c.y);g.rotate(c.a);g.fillStyle='#4a2c00';drawStarPath(g,0,0,c.W*.42);g.fill();g.fillStyle='#fff4b0';drawStarPath(g,0,0,c.W*.32);g.fill();g.restore();
+  const t=gtime;for(let i=0;i<2;i++){const a=t*1.3+i*PI,rr=c.L*.55,sx=c.x+Math.cos(a)*rr,sy=c.y+Math.sin(a)*rr*.6,s=1.5+2*Math.max(0,Math.sin(t*4.5+i*2));g.fillStyle='#fff';g.fillRect(sx-s,sy-.6,2*s,1.2);g.fillRect(sx-.6,sy-s,1.2,2*s);}}catch(e){}})(drawCar);
+
 </script></body></html>
