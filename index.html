@@ -1636,7 +1636,7 @@ function openClothing(o,ward){const title=ward?'WARDROBE':o.name,sub=()=>(ward?'
 
 // ---------------- pawn shop ----------------
 function giveAmmo(i,n){player.ammo[i]+=n;player.owned=player.owned||[];player.owned[i]=true;player.wp=i;}
-const PAWN_STOCK=[{name:'Lockpick set (tool)',price:180,note:'Pick locks 2x faster and quieter',ok:()=>!tools.lockpick,fn:()=>{tools.lockpick=true;}},
+const PAWN_STOCK=[
   {name:'Duffel bag (tool)',price:220,note:'+6 kg carrying capacity',ok:()=>!tools.bag,fn:()=>{tools.bag=true;}},
   {name:'Used pistol (+30 ammo)',price:110,fn:()=>giveAmmo(3,30)},{name:'Used S-Uzi (+60 ammo)',price:360,fn:()=>giveAmmo(4,60)},{name:'Sawn-off shotgun (+10)',price:480,fn:()=>giveAmmo(5,10)},
   {name:'Old baseball bat',price:25,ok:()=>!(player.ammo[1]>0),fn:()=>{player.ammo[1]=Infinity;player.wp=1;}},{name:'Pocket knife',price:35,ok:()=>!(player.ammo[2]>0),fn:()=>{player.ammo[2]=Infinity;}},
@@ -1644,6 +1644,7 @@ const PAWN_STOCK=[{name:'Lockpick set (tool)',price:180,note:'Pick locks 2x fast
   {name:'Knock-off aviators',price:20,note:'Goes in your wardrobe',fn:()=>{wardrobe.add(wid('glasses','aviators','#d8a020'));player.outfit.glasses={t:'aviators',c:'#d8a020'};}},
   {name:'Mystery box',price:60,note:'Could be anything',fn:()=>{if(R()<.5){const v=ri(0,180);addMoney(v);msg(v?'IT HAD $'+v+' INSIDE':'IT WAS EMPTY. SUCKER','#ff8');}else{const k=pick(Object.keys(LOOT));if(!addLoot(k))addMoney(30);}}}];
 function openPawn(o){if(!o.stock||gtime>o.stockT){o.stockT=gtime+300;const pool=PAWN_STOCK.filter(s=>!s.ok||s.ok()).sort(()=>R()-.5);o.stock=pool.slice(0,6).map(s=>({s,sold:false}));}
+  for(const t of ST_TOOLS)if(!o.stock.some(e=>e.s===t))o.stock.unshift({s:t,sold:false});
   const f=()=>{const it=[],inv=player.inv;
     inv.forEach((x,i)=>{const v=pawnOffer(o,x);it.push({label:'Sell '+x.name+(x.hotT>0?'  [HOT]':''),right:'+$'+v,note:x.hotT>0?'Hot goods sell cheap. Wait '+Math.ceil(x.hotT/60)+' min (stash it) for a better price.':'Clean goods, fair price.',
       act:()=>{player.inv.splice(i,1);addMoney(v);sfx('cash');gainXP(2);career.fenced=(career.fenced||0)+1;}});});
@@ -1677,7 +1678,7 @@ function bagView(v){const p=player,sum=p.inv.reduce((s,x)=>s+x.val,0);v.title='B
 
 // ---------------- prompts ----------------
 function poiPrompt3(o,d,cand){
-  if(o.type==='house'){if(o.locked&&gtime>o.unlockT){if(player.pick)cand('E',d,'Picking the lock...',()=>{});else cand('E',d,'Pick the lock: '+o.name+(tools.lockpick?'':' (slow)'),()=>startPick(o));cand('R',d,'Kick the door in (loud)',()=>kickDoor(o));}
+  if(o.type==='house'){if(o.locked&&gtime>o.unlockT){if(player.pick)cand('E',d,'Picking the lock...',()=>{});else cand('E',d,'Pick the lock: '+o.name+(tools.lockpick?'':' (slow)'),()=>startPick(o));cand('R',d,tools.cutter?'Cut the glass (quiet)':'Kick the door in (loud)',()=>kickDoor(o));}
     else cand('E',d,(o.empty>gtime?'(cleaned out) ':'')+'Sneak into '+o.name,()=>enterInterior(o));return true;}
   if(o.type==='apt'){if(o.owned){cand('E',d,'Enter '+o.name,()=>enterInterior(o));if(garages[o.id])cand('R',d,'Take out your '+CAR_TYPES[garages[o.id].type].name.toLowerCase(),()=>takeCar(o));}
     else cand('E',d,'Buy '+o.name+' ($'+o.price+')',()=>buyApt(o));return true;}
@@ -2628,6 +2629,7 @@ const KB_ACTIONS=[
   {id:'sprint',label:'Sprint / nitro',canon:'ShiftLeft',def:['ShiftLeft','ShiftRight']},
   {id:'interact',label:'Interact / car in-out',canon:'KeyE',def:['KeyE','KeyF']},
   {id:'rob',label:'Rob / mug / kick door',canon:'KeyR',def:['KeyR',null]},
+  {id:'sneak',label:'Sneak (quiet walk) on / off',canon:'SneakKey',def:['KeyX',null]},
   {id:'tow',label:'Tow hook / release (tow truck)',canon:'TowHook',def:['KeyH',null]},
   {id:'fish',label:'Fish: cast / hook / reel',canon:'FishKey',def:['KeyG',null]},
   {id:'phone',label:'Phone',canon:'KeyC',def:['KeyC',null],must:1},
@@ -2752,7 +2754,7 @@ function gpPoll(){const list=navigator.getGamepads?navigator.getGamepads():[];le
   if(ui){for(const [k,on] of [['ArrowUp',up],['ArrowDown',dn],['ArrowLeft',lf],['ArrowRight',rt]]){if(on&&(!GP.nav[k]||now>GP.navT[k])){onPress(k);GP.navT[k]=now+(GP.nav[k]?120:380);}GP.nav[k]=on;}}else GP.nav={};
   const edge=i=>bt(i)&&!GP.prevB[i];
   if(state==='title'||state==='over'){if(edge(0)||edge(9))onPress('Enter');}
-  else{if(edge(0))onPress(ui?'Enter':'KeyE');if(edge(1))onPress(ui?'Backspace':'KeyR');if(edge(3))onPress('KeyI');if(edge(5))onPress('KeyQ');if(edge(4))onPress('WeapPrev');
+  else{if(edge(0))onPress(ui?'Enter':'KeyE');if(edge(1))onPress(ui?'Backspace':'KeyR');if(edge(3))onPress('KeyI');if(edge(5))onPress('KeyQ');if(edge(4))onPress('WeapPrev');if(edge(11))onPress('SneakKey');
     if(edge(8))onPress('KeyC');if(edge(9))onPress(phone.open||menu?'Escape':'KeyP');}
   // right stick aim + RT fire (same trick as the touch aim stick)
   const rx=ax[2]||0,ry=ax[3]||0,rl=Math.hypot(rx,ry),fire=bt(7);
@@ -5199,15 +5201,25 @@ function dnWarmAt(m){const h=dnHourF(m),b=(c,w)=>Math.max(0,1-Math.abs(h-c)/w);r
 function dnIsDawn(m){return dnHourF(m)<12;}
 function dnDate(){const m=Math.floor(DN.min)%1440;return{h:Math.floor(m/60),m:m%60,getHours(){return this.h;},getMinutes(){return this.m;}};}
 function dnClockStr(m){const t=Math.floor(m==null?DN.min:m)%1440;return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');}
-function dnPedMul(){return 1-.45*DN.dark;}
-function dnCarMul(){return 1-.3*DN.dark;}
+// crowd curves by hour (0..24): busy evening, sparse 2-4 AM, rising toward dawn; South Beach keeps nightlife
+const DN_PED_CURVE=[.5,.35,.18,.16,.18,.3,.55,.85,1,1,1,1,1,1,1,1,1,1,1,1,.95,.85,.75,.62,.5];
+const DN_CAR_CURVE=[.65,.5,.37,.35,.37,.5,.75,.95,1,1,1,1,1,1,1,1,1,1,1,1,1,.95,.9,.8,.65];
+const DN_NIGHTLIFE=new Set(['SOUTH BEACH','OCEAN DRIVE','SOUTH BEACH SANDS']);
+function dnCurve(C,m){const h=dnHourF(m),i=Math.floor(h),f=h-i;return C[i]+(C[i+1]-C[i])*f;}
+function dnNightlife(){try{const d=DISTRICTS[districtAt(focus.x,focus.y)];return !!(d&&DN_NIGHTLIFE.has(d.name));}catch(e){return false;}}
+function dnPedMul(m){let v=dnCurve(DN_PED_CURVE,m);const h=dnHourF(m);if((h>=20||h<5)&&dnNightlife())v=Math.max(v,.62);return v;}
+function dnCarMul(m){let v=dnCurve(DN_CAR_CURVE,m);const h=dnHourF(m);if((h>=20||h<5)&&dnNightlife())v=Math.max(v,.7);return v;}
+// thin out extra plain pedestrians off-screen when the curve drops (one every half second)
+function dnThin(dt){DN.thinT=(DN.thinT||0)-dt;if(DN.thinT>0||state!=='play'||interior)return;DN.thinT=.5;const mul=dnPedMul();if(mul>.97)return;const cap=PEDS*mul+4;let n=0;const plain=[];
+  for(const p of peds){if(p.dead||p.cop||p.gar!=null)continue;n++;if(p.kind==='ped'&&!p.gang&&!p.hostile&&!p.job&&!p.goCar&&!p.medic&&!p.mission&&!p.mugged&&!(p.calling>0)&&!(typeof ST!=='undefined'&&ST.calls.some(c=>c.q===p))&&!inView(p.x,p.y,80))plain.push(p);}
+  if(n>cap&&plain.length){const q=plain[0];const i=peds.indexOf(q);if(i>=0){peds.splice(i,1);DN.thinned=(DN.thinned||0)+1;}}}
 function dnGangMul(){return 1+.6*DN.dark;}
 function dnRefresh(){DN.dark=dnDarkAt();DN.warm=dnWarmAt();const p=dnPhaseAt();if(p!==DN.phase){const prev=DN.phase;DN.phase=p;for(const cb of DN.cbs.slice()){try{cb(p,prev);}catch(e){}}}}
 function dnSetMin(m,keepDay){const old=DN.min;m=((m%1440)+1440)%1440;if(!keepDay&&m<old)DN.day++;DN.min=m;dnRefresh();}
 function dnTick(dt){if(state!=='play'||phone.open||fade)return;DN.min+=dt*dnRate();if(DN.min>=1440){DN.min-=1440;DN.day++;}dnRefresh();
   for(const f of DN.flashes)f.t-=dt;if(DN.flashes.length&&DN.flashes[0].t<=0)DN.flashes=DN.flashes.filter(f=>f.t>0);
   if(DN.dark>.05)for(const b of bullets)if(!b._dn){b._dn=1;if(DN.flashes.length<24)DN.flashes.push({x:b.x,y:b.y,t:.08});}}
-update=(o=>function(dt){o(dt);dnTick(dt);})(update);
+update=(o=>function(dt){o(dt);dnTick(dt);try{dnThin(dt);}catch(e){}})(update);
 // ---- wait / sleep until a time
 function dnWaitUntil(h,why){
   if(stars>0){DN.lastDeny='WANTED';msg('CAN\'T REST WHILE WANTED - LOSE THE COPS FIRST','#ff6a5a',2.6);sfx&&sfx('deny');return false;}
@@ -5360,5 +5372,178 @@ PTA.time={DAY_REAL_MIN:DN_DAY_REAL_MIN,
   onPhase:cb=>{DN.cbs.push(cb);return()=>{const i=DN.cbs.indexOf(cb);if(i>=0)DN.cbs.splice(i,1);};},
   setTime:(h,m)=>dnSetMin(h*60+(m||0),true),waitUntil:h=>dnWaitUntil(h,'api'),
   requireWindow:(h0,h1,label)=>{if(PTA.time.inWindow(h0,h1))return true;msg((label||'THIS JOB')+' ONLY RUNS '+String(h0).padStart(2,'0')+':00-'+String(h1).padStart(2,'0')+':00','#ffb84a',2.6);return false;}};
+
+// ======================================================================= v6x: stealth + witnesses
+//  Crimes (parked-car theft, carjacking, mugging, break-ins) are only reported by someone who SEES or
+//  HEARS you. Sight range = base * exposure (light from PTA.time darkness + street lamps, headlights,
+//  neon, lit shop signs, police bars, flashes) * sneak * stealth perk, blocked by buildings (los) and
+//  halved behind a ped's back. Noise (gunfire, alarms, crashes, sprinting, kicking doors, smashing
+//  windows, picking) is heard through walls at close range. Cops report at once; civilians run and phone
+//  it in after a short delay you can stop (knock them down / KO / mug / kill). Unseen = no star; a
+//  conscious victim reports later with no description (heat stays under one star).
+//  Stealth rank (career.stealth): PROWLER -> NIGHT OWL -> GHOST from unseen crimes. Tools (pawn shops):
+//  Slim Jim -> Lockpick set -> Electronic bypass, plus Glass cutter; they stack with the perk.
+const ST_TIERS=[{n:'NOBODY',at:0},{n:'PROWLER',at:3},{n:'NIGHT OWL',at:10},{n:'GHOST',at:25}];
+const ST_PERK={sight:[1,.85,.74,.62],pick:[1,.85,.7,.55],noise:[1,.8,.6,.4],call:[0,1,2,3.5]};
+const ST_CFG={sight:290,copSight:340,carSight:360,minSight:34,hear:430,callT:3.5,victimT:15,crouchVis:.55,crouchSpd:.5,
+  heat:{theft:40,carjack:45,copjack:90,mug:45,breakin:45},copHeat:{theft:45,carjack:60,copjack:90,mug:60,breakin:70}};
+const ST_TOOLS=[
+  {id:'slimjim',name:'Slim Jim (car tool)',price:120,tier:'CAR TOOL 1',note:'Quiet car lock picks [R]: faster, fewer car alarms',ok:()=>!tools.slimjim&&!tools.lockpick&&!tools.bypass,fn:()=>{tools.slimjim=true;}},
+  {id:'lockpick',name:'Lockpick set (tool)',price:180,tier:'CAR + HOUSE TOOL 2',note:'Pick car and house locks 2x faster and quieter',ok:()=>!tools.lockpick&&!tools.bypass,fn:()=>{tools.lockpick=true;}},
+  {id:'bypass',name:'Electronic bypass (tool)',price:650,tier:'CAR + HOUSE TOOL 3',note:'Near-silent, very fast entry. Kills house alarms',ok:()=>tools.lockpick&&!tools.bypass,fn:()=>{tools.bypass=true;}},
+  {id:'cutter',name:'Glass cutter (tool)',price:260,tier:'QUIET ENTRY',note:'Cut glass instead of kicking doors; quieter car windows',ok:()=>!tools.cutter,fn:()=>{tools.cutter=true;}}];
+const ST={ctx:null,noise:0,light:1,vis:1,crouch:false,calls:[],pop:null,showT:0,task:null,lastEject:null,lightT:0,lastHp:null,
+  stats:{crimes:0,unseen:0,seen:0,cop:0,calls:0,stopped:0,victim:0,victimStopped:0,heard:0},log:[]};
+function STR(){let s=career.stealth;if(!s||typeof s!=='object')s=career.stealth={unseen:0,seen:0,stopped:0,best:0};s.unseen=s.unseen|0;s.seen=s.seen|0;s.stopped=s.stopped|0;return s;}
+function stTier(n){const u=n==null?STR().unseen:n;let t=0;ST_TIERS.forEach((x,i)=>{if(u>=x.at)t=i;});return t;}
+const carToolLv=()=>tools.bypass?3:tools.lockpick?2:tools.slimjim?1:0;
+const houseToolLv=()=>tools.bypass?2:tools.lockpick?1:0;
+function stPerkLines(t){if(!t)return['No perks yet','Get away unseen 3 times'];return['Seen -'+Math.round((1-ST_PERK.sight[t])*100)+'%','Picks -'+Math.round((1-ST_PERK.pick[t])*100)+'%','Noise -'+Math.round((1-ST_PERK.noise[t])*100)+'%','Calls +'+ST_PERK.call[t]+'s'];}
+const stNoiseMul=()=>ST_PERK.noise[stTier()];
+function stMakeNoise(v){ST.noise=Math.max(ST.noise,clamp(v,0,1));}
+// ---------------------------------------------------------------- light / exposure
+function stDistRect(x,y,x0,y0,x1,y1){const dx=Math.max(x0-x,0,x-x1),dy=Math.max(y0-y,0,y-y1);return Math.hypot(dx,dy);}
+function stLight(x,y){if(interior)return 1;const d=DN.dark;if(d<.03)return 1;let L=1-d*.78,lamp=0,add=0;const on=dnSmooth(.15,.45,d);
+  if(on>0){if(!DN.lamps)dnBuildLamps();const bx=Math.floor(x/T/12),by=Math.floor(y/T/12);
+    for(let cy=by-1;cy<=by+1;cy++)for(let cx=bx-1;cx<=bx+1;cx++){const a=DN.lamps.get(cx*1000+cy);if(!a)continue;for(const [lx,ly] of a){const r=Math.hypot(lx-x,ly-y);if(r<80)lamp=Math.max(lamp,.68*on*(1-r/80));}}}
+  add+=lamp;
+  for(const c of cars){if(c.wreck||c._fly)continue;const r0=Math.hypot(c.x-x,c.y-y);if(r0>230)continue;
+    if(on>0&&(c.driver||player.inCar===c)&&player.inCar!==c){const fx=c.x+Math.cos(c.a)*c.L/2,fy=c.y+Math.sin(c.a)*c.L/2,r=Math.hypot(x-fx,y-fy);
+      if(r<210){const da=Math.abs(angDiff(Math.atan2(y-fy,x-fx),c.a));if(da<.5)add+=.62*on*(1-r/210)*(1-da/.5*.4);}}
+    if(c.type==='police'&&c.driver==='cop'&&(stars>0||(c.ai&&c.ai.mode==='chase'))&&r0<110)add+=.35*(1-r0/110);}
+  if(on>0)for(const bd of buildings){if(bd.x1<x-60||bd.x0>x+60||bd.y1<y-60||bd.y0>y+60)continue;const lit=dnNeonOf(bd)||(bd.poi&&bd.poi.type!=='house');if(!lit)continue;
+    const r=stDistRect(x,y,bd.x0,bd.y0,bd.x1,bd.y1);if(r<50)add+=.32*on*(1-r/50);}
+  if(on>0&&typeof GAR!=='undefined')for(const G of GAR.list)if(stDistRect(x,y,G.x0,G.y0,G.x1,G.y1)<20)add+=.35*on;
+  for(const f of DN.flashes){const r=Math.hypot(f.x-x,f.y-y);if(r<90)add+=.6*(1-r/90);}
+  for(const e of explosions){const r=Math.hypot(e.x-x,e.y-y);if(r<230&&e.t<1)add+=.75*(1-r/230);}
+  return clamp(L+add,0,1);}
+function stVis(){const tg=player.inCar||player;return stLight(tg.x,tg.y)*(ST.crouch&&!player.inCar?ST_CFG.crouchVis:1);}
+// ---------------------------------------------------------------- who can see / hear
+function stSees(q,tx,ty,vis,hearR,isCop){const d=Math.hypot(q.x-tx,q.y-ty);const sight=Math.max(ST_CFG.minSight,(isCop?ST_CFG.copSight:ST_CFG.sight)*vis*ST_PERK.sight[stTier()]);
+  const reach=Math.max(sight,hearR);if(d>reach)return 0;const L=los(q.x,q.y,tx,ty);
+  let s=sight;if(q.a!=null&&d>ST_CFG.minSight){const da=Math.abs(angDiff(Math.atan2(ty-q.y,tx-q.x),q.a));if(da>2)s*=.45;}
+  if(d<s&&L)return 2;if(hearR>0&&d<hearR&&(L||d<hearR*.55))return 1;return 0;}
+function stFind(x,y,o){o=o||{};const vis=o.vis!=null?o.vis:stVis(),hearR=ST.noise*ST_CFG.hear*stNoiseMul(),tg=player.inCar||player;const tx=o.at?o.at[0]:tg.x,ty=o.at?o.at[1]:tg.y;
+  let cop=null,civ=null,gang=null,cd=1e9,how=0;
+  for(const q of peds){if(q.dead||q===o.victim||q.down>0||q.ko||q.off||(q.lvl|0)!==(player.lvl|0))continue;const h=stSees(q,tx,ty,vis,hearR,q.cop);if(!h)continue;
+    const d=Math.hypot(q.x-tx,q.y-ty);if(q.cop){if(!cop||d<cd){cop=q;cd=d;how=h;}continue;}if(!cop&&(!civ||d<Math.hypot(civ.x-tx,civ.y-ty))){civ=q;how=h;}
+    if(q.gang&&!gang)gang=q;}
+  if(!cop)for(const c of cars){if(c.driver!=='cop'||c.wreck||c===player.inCar)continue;const d=Math.hypot(c.x-tx,c.y-ty);if(d>ST_CFG.carSight)continue;
+    const s=Math.max(ST_CFG.minSight,ST_CFG.carSight*vis*ST_PERK.sight[stTier()]);if((d<s&&los(c.x,c.y,tx,ty))||(hearR>0&&d<hearR)){cop={car:c,x:c.x,y:c.y};how=d<s?2:1;break;}}
+  if(!cop&&!civ)return null;return{cop,civ,gang,how,vis,hearR};}
+// ---------------------------------------------------------------- crime resolution
+function stPop(text,col,sub,t){ST.pop={text,col,sub:sub||'',t:t||2.4,t0:t||2.4};ST.showT=Math.max(ST.showT,6);}
+function stNext(){const s=STR(),t=stTier(),nx=ST_TIERS[t+1];return nx?(nx.at-s.unseen)+' more to '+nx.n:'Top rank';}
+function stUnseen(kind){const s=STR(),t0=stTier();s.unseen++;ST.stats.unseen++;stPop('UNSEEN','#5dff7a',(kind==='breakin'?'NOBODY SAW THE BREAK-IN':'NOBODY SAW YOU')+'  \u2022  '+stNext());
+  const t1=stTier();if(t1>t0){s.best=Math.max(s.best|0,t1);msg('STEALTH RANK UP: '+ST_TIERS[t1].n+'!','#c8a0ff',3.2);try{notify('STEALTH RANK: '+ST_TIERS[t1].n+'  ('+stPerkLines(t1).slice(0,2).join(', ')+')','rep',2,{col:'#c8a0ff'});}catch(e){}sfx('level');}}
+function stGangSaw(f){if(!f||!f.gang||typeof turf7!=='function')return;const gg=turf7(f.gang.x,f.gang.y);if(gg&&gg.id===f.gang.gang&&r7Cd('stwit'+gg.id,4))gAdd(gg.id,-3,'THEY SAW YOU WORKING THEIR TURF');}
+function stResolve(kind,x,y,heat,f,o){o=o||{};ST.stats.crimes++;ST.showT=Math.max(ST.showT,6);const s=STR();ST.log.push([kind,f?(f.cop?'cop':'civ'):'unseen',Math.round(gtime)]);if(ST.log.length>40)ST.log.shift();
+  if(!f){stUnseen(kind);if(o.victim&&!o.victim.dead)stCall(o.victim,kind,heat,true);return'unseen';}
+  s.seen++;ST.stats.seen++;if(f.how===1)ST.stats.heard++;stGangSaw(f);
+  if(f.cop){ST.stats.cop++;stPop('WITNESSED!','#ff4040',f.how===1?'A COP HEARD THAT':'A COP SAW YOU');addHeat(Math.max(heat,ST_CFG.copHeat[kind]||heat));return'cop';}
+  stCall(f.civ,kind,Math.max(heat,ST_CFG.heat[kind]||heat),false);stPop('WITNESSED!','#ff7a30',(f.how===1?'SOMEONE HEARD YOU':'SOMEONE SAW YOU')+' - STOP THEM CALLING!');return'civ';}
+function stCrime(kind,x,y,heat,o){o=o||{};if(o.noise)stMakeNoise(o.noise);return stResolve(kind,x,y,heat,stFind(x,y,o),o);}
+function stCall(q,kind,heat,victim){if(!q||q.dead)return;if(ST.calls.some(c=>c.q===q))return;const t=stTier(),T0=(victim?ST_CFG.victimT:ST_CFG.callT)+ST_PERK.call[t];
+  ST.calls.push({q,kind,heat,victim,t:T0,T:T0,hp0:q.hp,mug0:!!q.mugged});if(victim)ST.stats.victim++;else ST.stats.calls++;
+  if(!q.cop&&!q.hostile){q.state='flee';q.fx=player.x;q.fy=player.y;q.t=Math.max(q.t||0,T0+1);}}
+function stTickCalls(dt){for(let i=ST.calls.length-1;i>=0;i--){const c=ST.calls[i],q=c.q;
+    if(c.mug0==null)c.mug0=!!q.mugged;const stopped=q.dead||q.down>0||q.ko||(q.mugged&&!c.mug0)||q.hp<c.hp0;
+    if(stopped){ST.calls.splice(i,1);if(c.victim){ST.stats.victimStopped++;}else{ST.stats.stopped++;STR().stopped++;stPop('CALL STOPPED','#5dff7a','THE WITNESS NEVER GOT THROUGH');}continue;}
+    c.t-=dt;if(c.t<=0){ST.calls.splice(i,1);
+      if(c.victim){const cap=STAR[1]-4;if(heat<cap){heat=Math.min(cap,heat+c.heat*.5);lastSeen=0;}msg('THE VICTIM REPORTED IT - NO GOOD DESCRIPTION','#ffb060',2.4);}
+      else{addHeat(c.heat);stPop('COPS CALLED','#ff4040','A WITNESS GOT THROUGH TO 911');msg('A WITNESS CALLED THE COPS!','#f88',2);}}}}
+// ---------------------------------------------------------------- hooks into existing crimes
+addHeat=(o=>function(v){if(ST.ctx&&v>0){ST.ctx.heat+=v;return;}return o(v);})(addHeat);
+const stNoCtx=f=>function(){const c=ST.ctx;ST.ctx=null;try{return f.apply(this,arguments);}finally{ST.ctx=c;}};
+cameraCheck=stNoCtx(cameraCheck);
+ejectDriver=(o=>function(c){const p=o(c);ST.lastEject=p;return p;})(ejectDriver);
+function stNearCar(){let best=null,bd=14;for(const c of cars){if(c.wreck)continue;const d=carDist(c,player.x,player.y);if(d<bd){bd=d;best=c;}}return best;}
+const stParkedOk=c=>c&&!c.driver&&!c.everPlayer&&!c.boat&&!c.wreck&&!c.towed&&c.gar==null;
+tryEnter=(o=>function(){if(player.inCar||interior||state!=='play')return o.apply(this,arguments);const c=stNearCar();if(!c)return o.apply(this,arguments);
+  const kind=c.driver==='ai'?'carjack':c.driver==='cop'?'copjack':stParkedOk(c)?'theft':null;if(!kind)return o.apply(this,arguments);
+  const picked=ST.picked===c;ST.picked=null;if(kind==='theft'&&!picked)stMakeNoise((tools.cutter?.32:.62)*stNoiseMul());
+  const at=[player.x,player.y];ST.ctx={heat:0};ST.lastEject=null;let ctxh;try{o.apply(this,arguments);}finally{ctxh=ST.ctx.heat;ST.ctx=null;}
+  if(player.inCar!==c){if(ctxh>0)addHeat(ctxh);return;}
+  ST.crouch=false;
+  if(c.alarmOn)stMakeNoise(1);if(c.stSeen)return;
+  const heat=Math.max(ctxh,ST_CFG.heat[kind]);stCrime(kind,c.x,c.y,heat,{victim:kind==='theft'?null:ST.lastEject,at});})(tryEnter);
+mugPed=(o=>function(q){if(interior||state!=='play'||!q||q.dead||q.mugged)return o.apply(this,arguments);ST.ctx={heat:0};let ctxh;try{o.apply(this,arguments);}finally{ctxh=ST.ctx.heat;ST.ctx=null;}
+  if(!q.mugged){if(ctxh>0)addHeat(ctxh);return;}stCrime('mug',q.x,q.y,Math.max(ctxh,ST_CFG.heat.mug),{victim:q});})(mugPed);
+// houses: lockpick uses our detection instead of the old dice; kicking is loud; glass cutter / bypass
+const ST_HPICK=[4.5,2.2,1.2],ST_HNOISE=[.3,.18,.07],ST_CPICK=[3.4,2.4,1.7,1.0],ST_CNOISE=[.35,.22,.14,.05],ST_CALARM=[.7,.45,.25,.06];
+startPick=(o=>function(h){o(h);const k=player.pick;if(k&&k.o===h&&!k.stInit){k.stInit=true;k.told=true;k.dur=ST_HPICK[houseToolLv()]*ST_PERK.pick[stTier()];}})(startPick);
+updatePick=(o=>function(dt){const k=player.pick;if(k&&!k.stSeen&&state==='play'&&!interior){stMakeNoise(ST_HNOISE[houseToolLv()]*stNoiseMul());ST.showT=Math.max(ST.showT,2);
+    const f=stFind(k.o.spot.x,k.o.spot.y);if(f){k.stSeen=true;stResolve('breakin',k.o.spot.x,k.o.spot.y,ST_CFG.heat.breakin,f);}}
+  ST.ctx={heat:0};try{o(dt);}finally{ST.ctx=null;}
+  if(k&&!player.pick&&k.t>=k.dur&&!k.stSeen){ST.stats.crimes++;stUnseen('breakin');}})(updatePick);
+kickDoor=(o=>function(h){if(tools.cutter){if(!ST.task)stStartTask('cut',h);return;}
+  const r=stCrime('breakin',h.spot.x,h.spot.y,ST_CFG.heat.breakin,{noise:1});ST.ctx={heat:0};try{o(h);}finally{ST.ctx=null;}return r;})(kickDoor);
+buildRoom3=(o=>function(h){const r=o(h);if(r&&r.type==='house'&&tools.bypass&&r.alarmT>0){r.alarmT=-1;r.bypassed=true;msg('BYPASS: HOUSE ALARM SILENCED','#9cf',2.2);}return r;})(buildRoom3);
+leaveHouse=(o=>function(r){const took=r.took;o(r);if(took>0&&R()<.15){const miss=ST_TOOLS.filter(t=>t.id!=='bypass'&&t.ok());if(miss.length){const t=miss[Math.floor(R()*miss.length)];t.fn();msg('YOU ALSO FOUND A '+t.name.toUpperCase().replace(/ \(.*\)/,'')+'!','#c8a0ff',2.6);}}})(leaveHouse);
+// timed tasks: quiet car lock pick, glass cutting
+function stStartTask(kind,tg){const lv=carToolLv(),t=stTier();const dur=kind==='cut'?2.6*ST_PERK.pick[t]:ST_CPICK[lv]*ST_PERK.pick[t];
+  ST.task={kind,tg,t:0,dur,x:player.x,y:player.y,seen:false};msg(kind==='cut'?'CUTTING THE GLASS... STAY STILL':'PICKING THE CAR LOCK... STAY STILL','#ff8',1.4);}
+function stTickTask(dt){const k=ST.task;if(!k)return;const p=player;if(p.inCar||!p.active||interior||Math.hypot(p.x-k.x,p.y-k.y)>10||(k.kind==='car'&&(k.tg.driver||k.tg.wreck||carDist(k.tg,p.x,p.y)>16))){ST.task=null;msg('STOPPED','#fa0',1);return;}
+  ST.showT=Math.max(ST.showT,2);stMakeNoise((k.kind==='cut'?.15:ST_CNOISE[carToolLv()])*stNoiseMul());k.t+=dt;if(Math.floor(k.t*3)!==Math.floor((k.t-dt)*3))sTone(k.kind==='cut'?900:2400,k.kind==='cut'?700:2000,.03,.04,'square');
+  if(!k.seen){const f=stFind(p.x,p.y);if(f){k.seen=true;if(k.kind==='car')k.tg.stSeen=true;
+    stResolve(k.kind==='cut'?'breakin':'theft',p.x,p.y,k.kind==='cut'?ST_CFG.heat.breakin:ST_CFG.heat.theft,f);}}
+  if(k.t>=k.dur){ST.task=null;if(k.kind==='cut'){const h=k.tg;h.unlockT=gtime+120;sfx('door');msg('YOU\'RE IN - NOT A SOUND','#8f8',1.2);enterInterior(h);if(!k.seen){ST.stats.crimes++;stUnseen('breakin');}}
+    else{const c=k.tg;if(c.alarm&&R()>=ST_CALARM[carToolLv()]){c.alarm=false;}c.alarmR=1;ST.picked=c;if(prompts)prompts.E=prompts.R=null;tryEnter();if(player.inCar!==c)ST.picked=null;}}}
+// prompts: quiet car pick on R, task progress on E
+computePrompts=(o=>function(){o();const p=player;if(!p.active||state!=='play'||fade||interior||p.inCar)return;
+  if(ST.task){prompts.E={d:0,label:(ST.task.kind==='cut'?'Cutting the glass':'Picking the car lock')+'... '+Math.ceil(ST.task.dur-ST.task.t)+'s',act:()=>{}};prompts.R=null;return;}
+  const c=stNearCar();if(stParkedOk(c)&&c.type!=='police'){const d=carDist(c,p.x,p.y),lv=carToolLv();if(!prompts.R||d<prompts.R.d)prompts.R={d,label:'Pick the car lock (quiet, '+(ST_CPICK[lv]*ST_PERK.pick[stTier()]).toFixed(1)+'s)',act:()=>stStartTask('car',c)};}})(computePrompts);
+// ---------------------------------------------------------------- sneak (crouch-walk) toggle
+function stToggleSneak(v){ST.crouch=v==null?!ST.crouch:!!v;ST.showT=Math.max(ST.showT,3);msg(ST.crouch?'SNEAKING - QUIETER, HARDER TO SEE':'SNEAK OFF','#c8a0ff',1.2);}
+onPress=(o=>function(code){if(code==='SneakKey'){if(state==='play'&&!menu&&!phone.open&&!fade)stToggleSneak();return;}return o(code);})(onPress);
+moveOnFoot=(o=>function(dt,collide){if(!ST.crouch||player.inCar)return o(dt,collide);const a=keys.ShiftLeft,b=keys.ShiftRight;keys.ShiftLeft=keys.ShiftRight=false;try{const r=o(dt*ST_CFG.crouchSpd,collide);if(r){player.vx*=1;}return r;}finally{keys.ShiftLeft=a;keys.ShiftRight=b;}})(moveOnFoot);
+layoutTouch=(o=>function(){const out=o();const p=player;if(state==='play'&&!menu&&!phone.open&&!fade&&p.active&&!p.inCar&&!interior&&(ST.crouch||DN.dark>.3||ST.showT>0||ST.task)){
+    const D=DPRS,m=12*D,B=TS.B||60*D,BA=B*1.18,ax=W-m-BA/2,ay=H-m-BA/2,r=B*.5;const slots=[[ax-BA*2.2,ay+BA*.06],[ax-BA*1.05,ay-BA*1.05],[ax-BA*2.1,ay-BA*1.1],[ax,ay-BA*2.3],[ax-BA*1.2,ay-BA*2.1]];let pos=slots[slots.length-1];
+    for(const s of slots)if(out.every(b=>b.rect||Math.hypot(b.x-s[0],b.y-s[1])>(b.r+r)*.95)){pos=s;break;}
+    out.push(tbtn('sneak',pos[0],pos[1],r,ST.crouch?'STAND':'SNEAK',{key:'SneakKey',col:ST.crouch?'#c8a0ff':'#9a80d0',sub:KL('sneak')}));TS.btns=out;}
+  return out;})(layoutTouch);
+// ---------------------------------------------------------------- per-frame
+function stTick(dt){if(state!=='play')return;const p=player;if(p.inCar&&ST.crouch)ST.crouch=false;if(p.inCar&&prompts&&prompts.E&&/Picking the/.test(prompts.E.label||''))prompts.E=null;ST.noise=Math.max(0,ST.noise-dt*.9);if(ST.showT>0)ST.showT-=dt;if(ST.pop){ST.pop.t-=dt;if(ST.pop.t<=0)ST.pop=null;}
+  if(!p.inCar&&p.active&&!ST.crouch&&(keys.ShiftLeft||keys.ShiftRight)&&Math.hypot(p.vx||0,p.vy||0)>120)stMakeNoise(.35*stNoiseMul());
+  for(const b of bullets)if(!b._st&&b.owner==='player'){b._st=1;stMakeNoise(1);}
+  const c=p.inCar;if(c){if(ST.lastHp!=null&&ST.lastCar===c&&ST.lastHp-c.hp>3)stMakeNoise(.8);ST.lastHp=c.hp;ST.lastCar=c;}else ST.lastCar=null;
+  for(const k of cars)if(k.alarmOn&&k.alarmOn.cause==='player'&&Math.hypot(k.x-(c||p).x,k.y-(c||p).y)<200){stMakeNoise(.9);break;}
+  ST.lightT-=dt;if(ST.lightT<=0){ST.lightT=.1;ST.light=stLight((c||p).x,(c||p).y);}ST.vis=ST.light*(ST.crouch&&!c?ST_CFG.crouchVis:1);
+  stTickTask(dt);stTickCalls(dt);}
+update=(o=>function(dt){o(dt);try{stTick(dt);}catch(e){console.error(e);}})(update);
+startGame=(o=>function(){ST.calls=[];ST.task=null;ST.pop=null;ST.noise=0;ST.crouch=false;ST.picked=null;ST.showT=0;for(const k in ST.stats)ST.stats[k]=0;return o.apply(this,arguments);})(startGame);
+// ---------------------------------------------------------------- HUD: eye meter, popups, witness markers
+function stEye(cx,cy,r,lv,col){ctx.save();ctx.lineWidth=Math.max(2,r*.16);ctx.strokeStyle='#000';ctx.fillStyle=lv<.3?'#55606e':'#f2f2f2';
+  ctx.beginPath();ctx.moveTo(cx-r,cy);ctx.quadraticCurveTo(cx,cy-r*(lv<.3?.35:.95),cx+r,cy);ctx.quadraticCurveTo(cx,cy+r*(lv<.3?.35:.95),cx-r,cy);ctx.closePath();ctx.fill();ctx.stroke();
+  if(lv>=.3){ctx.fillStyle=col;ctx.beginPath();ctx.arc(cx,cy,r*.42,0,TAU);ctx.fill();ctx.fillStyle='#000';ctx.beginPath();ctx.arc(cx,cy,r*.18,0,TAU);ctx.fill();}
+  else{ctx.strokeStyle='#5dff7a';ctx.lineWidth=Math.max(2,r*.14);ctx.beginPath();ctx.moveTo(cx-r*.9,cy+r*.75);ctx.lineTo(cx+r*.9,cy-r*.75);ctx.stroke();}ctx.restore();}
+function stMeterOn(){const p=player;return state==='play'&&!interior&&!menu&&!phone.open&&p.active&&(ST.crouch||DN.dark>.3||ST.showT>0||ST.task||p.pick||ST.calls.length>0);}
+function stDrawHUD(){const u=Math.max(.9,U*(typeof TXS==='function'?TXS():1))*(TOUCHUI?1.15:1.25);
+  if(stMeterOn()){const lv=ST.vis,w=172*u,h=64*u,x=12*u,y=Math.max(H*.3,(TOUCHUI?210:180)*U);const col=lv<.3?'#5dff7a':lv<.6?'#ffd23a':'#ff4a3a';
+    ctx.save();ctx.globalAlpha=.88;ctx.fillStyle='#0c0f18';uiRRect(ctx,x,y,w,h,10*u);ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=col;ctx.lineWidth=3*u;ctx.stroke();
+    stEye(x+32*u,y+h/2,20*u,lv,col);ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='bold '+Math.round(19*u)+'px '+FONT;
+    outline(lv<.3?'HIDDEN':lv<.6?'SEEN?':'EXPOSED',x+62*u,y+20*u,col,3*u);
+    const bx=x+62*u,by=y+36*u,bw=w-74*u,bh=10*u;ctx.fillStyle='#333';ctx.fillRect(bx,by,bw,bh);ctx.fillStyle=col;ctx.fillRect(bx,by,bw*clamp(lv,0,1),bh);
+    if(ST.noise>.05){ctx.fillStyle='#ff9a3a';ctx.fillRect(bx,by+bh+3*u,bw*ST.noise,4*u);}
+    ctx.font='bold '+Math.round(12*u)+'px '+FONT;ctx.fillStyle=ST.crouch?'#c8a0ff':'#9aa';ctx.fillText(ST.crouch?'SNEAKING':(ST.noise>.3?'NOISY':'')||'',bx,y+h-7*u);ctx.restore();}
+  if(ST.pop&&!phone.open&&!menu){const P=ST.pop,k=Math.min(1,(P.t0-P.t)*6),a=Math.min(1,P.t*2.5);ctx.save();ctx.globalAlpha=a;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.font='bold '+Math.round(44*u*(.7+.3*k))+'px '+FONT;outline(P.text,W/2,H*.3,P.col,6*u);if(P.sub){ctx.font='bold '+Math.round(17*u)+'px '+FONT;outline(P.sub,W/2,H*.3+36*u,'#fff',4*u);}ctx.restore();}
+  const wc=ST.calls.find(c=>!c.victim);if(wc&&!phone.open&&!menu&&!interior){ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold '+Math.round(18*u)+'px '+FONT;
+    outline('\u260e WITNESS CALLING THE COPS  '+wc.t.toFixed(1)+'s  - KNOCK THEM DOWN!',W/2,H*.3+(ST.pop?66:0)*u,'#ff6a5a',4*u);ctx.restore();}
+  if(!interior&&!phone.open)for(const c of ST.calls){const q=c.q,s=Pj(q.x,q.y,0),sx=s[0]*PIX,sy=s[1]*PIX-30*u;if(sx<-40||sy<-40||sx>W+40||sy>H+40)continue;const fr=clamp(c.t/c.T,0,1);
+    ctx.save();ctx.fillStyle=c.victim?'#ffb060':'#ff3a3a';ctx.strokeStyle='#000';ctx.lineWidth=3*u;ctx.beginPath();ctx.arc(sx,sy,15*u,0,TAU);ctx.fill();ctx.stroke();
+    ctx.strokeStyle='#fff';ctx.lineWidth=4*u;ctx.beginPath();ctx.arc(sx,sy,19*u,-PI/2,-PI/2+TAU*fr);ctx.stroke();ctx.fillStyle='#fff';ctx.font='bold '+Math.round(20*u)+'px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(c.victim?'\u260e':'!',sx,sy+1);ctx.restore();}
+  if(ST.task){const k=ST.task,fr=clamp(k.t/k.dur,0,1),bw=240*u,bx=W/2-bw/2,by=H*.62;ctx.save();ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(bx-4*u,by-4*u,bw+8*u,26*u);ctx.fillStyle='#c8a0ff';ctx.fillRect(bx,by,bw*fr,18*u);
+    ctx.font='bold '+Math.round(14*u)+'px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#fff';ctx.fillText(k.kind==='cut'?'CUTTING GLASS':'PICKING LOCK',W/2,by+9*u);ctx.restore();}}
+drawHUD=(o=>function(){o();try{if(state==='play')stDrawHUD();}catch(e){console.error(e);}})(drawHUD);
+// ---------------------------------------------------------------- STANDING page + pawn tools
+phoneView=(o=>function(){const v=o();if(phone.app!=='standing'||!v||!v.items)return v;const s=STR(),t=stTier(),nx=ST_TIERS[t+1];
+  let i=v.items.findIndex(it=>GANGS7.some(g=>it.label&&it.label.indexOf(g.name)===0));if(i<0)i=v.items.length;const pk=stPerkLines(t);
+  const tl=[tools.bypass?'Electronic bypass':tools.lockpick?'Lockpick set':tools.slimjim?'Slim Jim':null,tools.cutter?'Glass cutter':null].filter(Boolean);
+  v.items.splice(i,0,{label:'STEALTH  '+s.unseen+' UNSEEN',right:ST_TIERS[t].n,rcol:'#c8a0ff',sub:nx?'Next: '+nx.n+' at '+nx.at+' unseen':'Top rank: GHOST',bar:{v:nx?clamp((s.unseen-ST_TIERS[t].at)/(nx.at-ST_TIERS[t].at),0,1):1,c:'#a070ff'},act:()=>{}},
+    {label:'STEALTH PERKS',right:'',sub:pk.slice(0,2).join('  \u2022  '),sub2:pk.slice(2).join('  \u2022  ')||'Seen '+s.seen+'  \u2022  Calls stopped '+s.stopped,act:()=>{}},
+    {label:'THIEF TOOLS',right:tl.length+'/2',sub:tl.join('  \u2022  ')||'None yet',sub2:'Upgrades: pawn shops (quieter + faster)',act:()=>{}});return v;})(phoneView);
+KB_ACTIONS.length;// (sneak key is declared in v4k)
+window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get stealth(){return{ST,ST_CFG,ST_TIERS,ST_PERK,ST_TOOLS,SR:STR,stTier,stLight,stVis,stFind,stCrime,stResolve,stCall,stToggleSneak,stStartTask,carToolLv,houseToolLv};}}));
 
 </script></body></html>
