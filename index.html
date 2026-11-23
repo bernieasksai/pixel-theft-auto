@@ -4794,14 +4794,20 @@ function nkDrawPlain(bd){const h=bd.h;g.setTransform(1,0,0,1,0,0);
     g.fillStyle='#eee';g.fillRect(cx-12,cy-14,5,28);g.fillRect(cx+7,cy-14,5,28);g.fillRect(cx-7,cy-2.5,14,5);}
   g.setTransform(1,0,0,1,0,0);}
 // tokens + stash on the ground, under the buildings
-function nkDrawGroundToks(){if(interior||typeof tokBuild!=='function')return;try{setWorld(0);const R=TKR();for(const k of tokBuild())if(!R.got[k.key]&&!k.lvl&&inView(k.x,k.y,30))drawTok8(k);
+// v6u: a token under a roof piece is only drawn while you are inside that block's nook (so nothing peeks out past the roof edge from the street)
+function nkTokShown(k){if(!nkCovered(k.x,k.y))return true;const bd=nkGroupAt(k.x,k.y);return !!bd&&NK8.cutOn&&nkHoles(bd).length>0;}
+function nkDrawGroundToks(){if(interior||typeof tokBuild!=='function')return;try{setWorld(0);const R=TKR();for(const k of tokBuild())if(!R.got[k.key]&&!k.lvl&&inView(k.x,k.y,30)&&nkTokShown(k))drawTok8(k);
   if(R.ms[10]){const s=tokStashPos();if(s&&inView(s.x,s.y,30))drawStash8(s,R.stashCd<=0);}g.setTransform(1,0,0,1,0,0);}catch(e){}}
 // which world points should see through this group's roof right now
 function nkHoles(bd){const out=[],me=player.inCar||player;if(state!=='play'&&state!=='dead')return out;
-  const n=bd.nk,pad=6,inside=me.x>bd.x0-pad&&me.x<bd.x1+pad&&me.y>bd.y0-pad&&me.y<bd.y1+pad;
-  // you: only when actually under a roof piece (a roofed nook, arcade or the fake-wall corridor)
-  if(inside){let cov=false;for(const [ox,oy] of[[0,0],[7,0],[-7,0],[0,7],[0,-7]])if(nkCovered(me.x+ox,me.y+oy)){cov=true;break;}if(cov)out.push({x:me.x,y:me.y,r:1});}
-  if(typeof TK8!=='undefined'&&TK8.list){const R=TKR();for(const k of TK8.list){if(R.got[k.key]||k.x<bd.x0||k.x>bd.x1||k.y<bd.y0||k.y>bd.y1)continue;const d=Math.hypot(k.x-me.x,k.y-me.y);if(d<120&&(nkCovered(k.x,k.y)||!inside))out.push({x:k.x,y:k.y,r:.75});}}
+  const n=bd.nk,inside=me.x>bd.x0&&me.x<bd.x1&&me.y>bd.y0&&me.y<bd.y1;if(!inside)return out;
+  // v6u: only when you are actually standing (or parked) in a carved nook / passage / court cell of this block that sits under a roof piece;
+  // a tucked token never opens the roof by itself, so from the street the roof keeps it hidden
+  const tx=Math.floor(me.x/T),ty=Math.floor(me.y/T);if(!NK8.cellSet.has(ty*N+tx)||nkGroupAt(me.x,me.y)!==bd)return out;
+  let cov=false;for(const [ox,oy] of[[0,0],[5,0],[-5,0],[0,5],[0,-5]])if(nkCovered(me.x+ox,me.y+oy)){cov=true;break;}if(!cov)return out;
+  out.push({x:me.x,y:me.y,r:1});
+  // once you are inside, a token tucked in the same block close by shows through too
+  if(typeof TK8!=='undefined'&&TK8.list){const R=TKR();for(const k of TK8.list){if(R.got[k.key]||k.lvl||k.x<bd.x0||k.x>bd.x1||k.y<bd.y0||k.y>bd.y1)continue;if(Math.hypot(k.x-me.x,k.y-me.y)<90&&nkCovered(k.x,k.y))out.push({x:k.x,y:k.y,r:.75});}}
   return out;}
 let _nkLT=0;
 drawBuildings=(o=>function(){nkDrawGroundToks();if(typeof W4!=='undefined'&&W4.gas.length)w4DrawCanopies();
@@ -4952,14 +4958,28 @@ function tokTick(dt){const L=tokBuild(),R=TKR(),p=player;if(TK8.banner){TK8.bann
 update=(o=>function(dt){o(dt);try{tokTick(dt);}catch(e){if(!TK8.err){TK8.err=String(e);console.error(e);}}})(update);
 // ---------------------------------------------------------------- drawing
 const TOK8_SCALE=.95;function drawTok8(k){g.save();g.translate(k.x,k.y);g.scale(TOK8_SCALE,TOK8_SCALE);g.translate(-k.x,-k.y);drawTok8b(k);g.restore();}
-function drawTok8b(k){const t=gtime,sp=Math.cos(t*3.2+k.ph),w=Math.max(.12,Math.abs(sp)),bob=Math.sin(t*2.6+k.ph)*1.8,x=k.x,y=k.y-5+bob,r=8.5;
-  g.fillStyle='rgba(0,0,0,.33)';g.beginPath();g.ellipse(k.x+2,k.y+5,6.5,2.6,0,0,TAU);g.fill();
-  const gl=g.createRadialGradient(x,y,1,x,y,15);gl.addColorStop(0,'rgba(255,225,90,.5)');gl.addColorStop(1,'rgba(255,225,90,0)');g.fillStyle=gl;g.beginPath();g.arc(x,y,15,0,TAU);g.fill();
-  g.fillStyle='#7a4c00';g.beginPath();g.ellipse(x+(sp<0?-1.4:1.4)*(1-w),y,r*w+1.3,r+.6,0,0,TAU);g.fill();
-  g.fillStyle=sp>0?'#ffd23a':'#f2b21c';g.beginPath();g.ellipse(x,y,r*w,r,0,0,TAU);g.fill();g.strokeStyle='#4a2c00';g.lineWidth=1;g.stroke();
-  if(w>.3){g.save();g.translate(x,y);g.scale(w,1);g.fillStyle='rgba(255,255,255,.35)';g.beginPath();g.arc(-2.5,-2.5,3.2,0,TAU);g.fill();g.fillStyle=sp>0?'#fff4b0':'#ffe680';drawStarPath(g,0,.5,5.2);g.fill();g.restore();}
-  for(let i=0;i<3;i++){const a=t*1.7+i*2.09+k.ph,rr=13+2*Math.sin(t*4+i),sx=x+Math.cos(a)*rr,sy=y+Math.sin(a)*rr*.75,s=1.2+1.8*Math.max(0,Math.sin(t*5+i*1.7));
-    g.fillStyle='#fff';g.fillRect(sx-s,sy-.5,2*s,1);g.fillRect(sx-.5,sy-s,1,2*s);}}
+// v6u: Bernie's face stamped on the tokens (hand-cleaned 20px pixel sprite from art/bernie_face.png, head + cap only) and a 44px one for the banner / app
+const TOK8_FACE20='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAABX0lEQVR4nKWSvUoDQRSFz25EAjGVFkrYVEFIJ4idVvoEYpHaWATSpIg+g5gUaQQJpk8hIWWKWLldCAQbh2ULcZGNhY2KBEHWQmac381iTjPMvXM/zpwZCwblnEKkqz8HvmWaAQClyYM2nE0AQBh4icFCkcLiQPOgtg4WBh7CwMN45AIAbldXhBUAxiMXOacQydHYkGRyJcO2d3aVm2mBOu2/frBVhslQSy4sqiV+s3Y8XBhoAUB1Lx8BQP9xGaliBd8PV/+CpYoVEUh1Wj5MDGl0egCAy7snS3EIAC/vX+xws1ZSAPVWV+k3Oj0GFDKkzg7Oro2OmrVSbN/m7fJy733jUFxf+w+HFyeYDc6FGiEEhBBjXwFmM2khn6Sqt7rIZtJszzL0p2/KQa0GEwC/WbbbfWWWZXe0tc5eWn5dOsjL+5wJ+5vJ9O/b6KA6sMk5hSlAHXSeeJgWmBQsg6h+AMbjkdAC3k/nAAAAAElFTkSuQmCC',TOK8_FACE44='data:image/png;base64,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';
+const TOK8_FACE={coin:null,big:null,raw:null};
+(()=>{try{const a=new Image();a.onload=()=>{const c=document.createElement('canvas');c.width=a.width;c.height=a.height;const x=c.getContext('2d');x.drawImage(a,0,0);const d=x.getImageData(0,0,c.width,c.height),p=d.data;
+    // emboss into the coin: pull every colour toward worn bronze (darker), keep a hint of the blue brim + the red heart
+    for(let i=0;i<p.length;i+=4){if(!p[i+3])continue;const r=p[i],gg=p[i+1],b=p[i+2],L=(r*.3+gg*.59+b*.11)/255,blue=b>r+40,red=r>gg+90;
+      const br=[52+L*120,40+L*96,26+L*62],k=blue?.5:red?.45:.3;p[i]=br[0]*(1-k)+r*k*.8;p[i+1]=br[1]*(1-k)+gg*k*.8;p[i+2]=br[2]*(1-k)+b*k*.8;p[i+3]=235;}
+    x.putImageData(d,0,0);TOK8_FACE.coin=c;TOK8_FACE.raw=a;};a.src=TOK8_FACE20;
+  const b=new Image();b.onload=()=>{TOK8_FACE.big=b;};b.src=TOK8_FACE44;}catch(e){}})();
+// v6u: low-key look - a small, worn dark-bronze coin lying flat; no halo, no sparkles; a faint glint every ~5 s, only up close
+const TOK8_LOOK={r:7,glintR:115,period:5,glintLen:.35};
+function drawTok8b(k){const t=gtime,x=k.x,y=k.y-1.5,r=TOK8_LOOK.r,me=player.inCar||player,d=Math.hypot(me.x-k.x,me.y-k.y);
+  g.fillStyle='rgba(0,0,0,.28)';g.beginPath();g.ellipse(x+1.2,y+2.2,r+.6,r*.55,0,0,TAU);g.fill();
+  g.fillStyle='#3a2e1e';g.beginPath();g.ellipse(x,y+.9,r+.4,r*.82+.4,0,0,TAU);g.fill();
+  g.fillStyle='#6e5a3c';g.beginPath();g.ellipse(x,y,r,r*.82,0,0,TAU);g.fill();g.strokeStyle='#2a2116';g.lineWidth=.9;g.stroke();
+  g.strokeStyle='rgba(30,24,14,.55)';g.lineWidth=.8;g.beginPath();g.ellipse(x,y,r*.62,r*.5,0,0,TAU);g.stroke();
+  if(TOK8_FACE.coin){g.save();g.beginPath();g.ellipse(x,y,r*.9,r*.82*.9,0,0,TAU);g.clip();g.imageSmoothingEnabled=false;const fw=r*1.62,fh=fw*.84;g.drawImage(TOK8_FACE.coin,x-fw/2,y-fh/2+.3,fw,fh);g.restore();}
+  else{g.fillStyle='#57472f';g.save();g.translate(x,y);g.scale(1,.82);drawStarPath(g,0,0,2.6);g.fill();g.restore();}
+  g.fillStyle='rgba(150,130,95,.16)';g.beginPath();g.ellipse(x-r*.5,y-r*.45,r*.22,r*.12,-.5,0,TAU);g.fill();
+  const c=(t+k.ph*1.7)%TOK8_LOOK.period;k._gl=0;
+  if(d<TOK8_LOOK.glintR&&c<TOK8_LOOK.glintLen){const a=Math.sin(c/TOK8_LOOK.glintLen*Math.PI)*.55*(1-d/TOK8_LOOK.glintR*.6),s=2.6;k._gl=a;
+    g.fillStyle='rgba(255,240,200,'+a.toFixed(3)+')';const gx=x-r*.3,gy=y-r*.35;g.fillRect(gx-s,gy-.4,2*s,.8);g.fillRect(gx-.4,gy-s,.8,2*s);}}
 function drawStash8(s,ready){g.save();g.translate(s.x,s.y);g.scale(1.1,1.1);g.translate(-s.x,-s.y);drawStash8b(s,ready);g.restore();}
 function drawStash8b(s,ready){const x=s.x,y=s.y;g.fillStyle='rgba(0,0,0,.35)';g.fillRect(x-9,y-4,20,12);g.fillStyle=ready?'#6a4a20':'#3a3028';g.fillRect(x-10,y-8,20,14);
   g.fillStyle=ready?'#ffd23a':'#776';g.fillRect(x-10,y-8,20,2);g.fillRect(x-10,y+4,20,2);g.fillRect(x-1.5,y-8,3,14);
@@ -4973,14 +4993,16 @@ drawWorldOverlays=(o=>function(){o();if(interior)return;try{setWorld(0);
       for(let i=0;i<16;i++){const an=i*TAU/16,d=lt*60;g.fillRect(cx+Math.cos(an)*d-1.5,cy+Math.sin(an)*d+lt*lt*12-1.5,3,3);}g.globalAlpha=1;}}}}catch(e){}})(drawWorldOverlays);
 drawMiniFish6=(o=>function(M,u,mx0,my0,mw,mh){o(M,u,mx0,my0,mw,mh);try{const R=TKR();for(const k of tokBuild()){if(!R.got[k.key])continue;const [x,y]=M(k.x,k.y);if(x<mx0-5||x>mx0+mw+5||y<my0-5||y>my0+mh+5)continue;
     ctx.fillStyle='#000';ctx.beginPath();ctx.moveTo(x,y-4*u);ctx.lineTo(x+4*u,y);ctx.lineTo(x,y+4*u);ctx.lineTo(x-4*u,y);ctx.closePath();ctx.fill();ctx.fillStyle='#ffd23a';ctx.beginPath();ctx.moveTo(x,y-2.6*u);ctx.lineTo(x+2.6*u,y);ctx.lineTo(x,y+2.6*u);ctx.lineTo(x-2.6*u,y);ctx.closePath();ctx.fill();}
-  if(TK8.near<300&&state==='play'){const ph=(rtNow()*1.4)%1,cx=mx0+mw/2,cy=my0+mh/2,a=(1-TK8.near/300)*.8*(1-ph);ctx.strokeStyle='rgba(255,215,60,'+a+')';ctx.lineWidth=2.5*u;ctx.beginPath();ctx.arc(cx,cy,(6+ph*26)*u,0,TAU);ctx.stroke();}}catch(e){}})(drawMiniFish6);
+  }catch(e){}})(drawMiniFish6);// v6u: no proximity pulse (it gave tokens away)
 drawHUD=(o=>function(){o();const b=TK8.banner;if(!b||state!=='play'||interior||menu||phone.open||fade)return;try{const u=U*(TOUCHUI?1.15:1),k=b.T-b.t,pop=k<.18?.6+.4*(k/.18)*1.1:k<.3?1.04:1,al=Math.min(1,b.t/.4);
   ctx.save();ctx.globalAlpha=al;ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';const main='HIDDEN TOKEN '+b.n+'/'+TOK8_TOTAL,sub=b.dn+'  '+b.dg+'/'+b.dt;
-  let fs=Math.round(46*u);ctx.font='bold '+fs+'px '+FONT;while(ctx.measureText(main).width>W*.86&&fs>14){fs--;ctx.font='bold '+fs+'px '+FONT;}
-  let f2=Math.round(24*u);ctx.font='bold '+f2+'px '+FONT;const lines=[[sub,'#fff']].concat(b.extra);for(const l of lines)while(ctx.measureText(l[0]).width>W*.86&&f2>11){f2--;ctx.font='bold '+f2+'px '+FONT;}
-  const cy=H*.3,h=fs*1.25+lines.length*f2*1.35+18*u;ctx.font='bold '+fs+'px '+FONT;let bw=ctx.measureText(main).width;ctx.font='bold '+f2+'px '+FONT;for(const l of lines)bw=Math.max(bw,ctx.measureText(l[0]).width);bw=Math.min(W*.94,bw+48*u);
+  const fz=TOK8_FACE.big?Math.round(Math.min(78*u,H*.15)):0,fg=fz?fz+14*u:0;
+  let fs=Math.round(46*u);ctx.font='bold '+fs+'px '+FONT;while(ctx.measureText(main).width>W*.86-fg&&fs>14){fs--;ctx.font='bold '+fs+'px '+FONT;}
+  let f2=Math.round(24*u);ctx.font='bold '+f2+'px '+FONT;const lines=[[sub,'#fff']].concat(b.extra);for(const l of lines)while(ctx.measureText(l[0]).width>W*.86-fg&&f2>11){f2--;ctx.font='bold '+f2+'px '+FONT;}
+  const cy=H*.3,h=Math.max(fs*1.25+lines.length*f2*1.35+18*u,fz+14*u);ctx.font='bold '+fs+'px '+FONT;let bw=ctx.measureText(main).width;ctx.font='bold '+f2+'px '+FONT;for(const l of lines)bw=Math.max(bw,ctx.measureText(l[0]).width);bw=Math.min(W*.96,bw+48*u+fg);
   ctx.translate(W/2,cy);ctx.scale(pop,pop);ctx.fillStyle='rgba(10,8,0,.78)';ctx.strokeStyle='#ffd23a';ctx.lineWidth=3*u;ctx.beginPath();ctx.roundRect?ctx.roundRect(-bw/2,-h/2,bw,h,12*u):ctx.rect(-bw/2,-h/2,bw,h);ctx.fill();ctx.stroke();
-  let y=-h/2+9*u+fs*.62;ctx.font='bold '+fs+'px '+FONT;outline(main,0,y,'#ffd23a',6*u);y+=fs*.62+f2*.75;ctx.font='bold '+f2+'px '+FONT;for(const l of lines){outline(l[0],0,y,l[1],4*u);y+=f2*1.35;}
+  if(fz){ctx.save();ctx.imageSmoothingEnabled=false;ctx.drawImage(TOK8_FACE.big,-bw/2+12*u,-fz/2,fz,fz);ctx.restore();}const ox=fg/2,th=fs*1.25+lines.length*f2*1.35;
+  let y=-th/2+fs*.62-2*u;ctx.font='bold '+fs+'px '+FONT;outline(main,ox,y,'#ffd23a',6*u);y+=fs*.62+f2*.75;ctx.font='bold '+f2+'px '+FONT;for(const l of lines){outline(l[0],ox,y,l[1],4*u);y+=f2*1.35;}
   ctx.restore();}catch(e){}})(drawHUD);
 // ---------------------------------------------------------------- phone app
 {const si=APPS.findIndex(a=>a.id==='system');APPS.splice(si<0?APPS.length:si,0,{id:'tokens',name:'TOKENS',col:'#d8a010',g:'\u25c6'});}
@@ -4991,10 +5013,12 @@ function tokView(){const v={title:'TOKENS',lines:[],items:[],foot:[],cards:true}
   for(const d of TK8.dist){const D=tokDist(d.dn),done=D.got===D.tot,left=[...new Set(D.toks.filter(k=>!tokHas(k)).sort((a,b)=>(b.kind==='roof')-(a.kind==='roof')).map(k=>TOK8_HINT[k.kind]))].slice(0,2);
     v.items.push({label:tokPretty(d.dn)+'  '+D.got+'/'+D.tot,right:done?'DONE':'',rcol:'#9f9',col:done?'#60e070':null,sub:done?'Bonus paid: $'+(250*D.tot).toLocaleString('en-US'):'Look: '+left.join(', '),bar:{v:D.got/D.tot,c:done?'#60e070':'#ffd23a'},act:()=>{}});}
   for(const m of TOK8_MS){const got=!!R.ms[m.n];v.items.push({label:m.name,right:got?'GOT':'AT '+m.n,rcol:got?'#9f9':'#ffd23a',col:got?'#ffd23a':null,dis:!got,sub:m.sub,sub2:m.sub2||(got?'Unlocked':m.n+' tokens'),act:()=>{}});}
-  if(!TOUCHUI)v.foot.push('Tokens spin and sparkle.','The minimap pulses gold','when one is close.');return v;}
+  if(!TOUCHUI)v.foot.push('Tokens are small worn coins.','They hide well: look closely.');return v;}
 phoneView=(o=>function(){if(phone.app==='tokens')return tokView();return o();})(phoneView);
+drawPhone=(o=>function(){o();try{if(!phone.open||phone.app!=='tokens'||!TOK8_FACE.big)return;const G=phoneGeom(),u=G.u,top=G.big?30*u:40*u,sx=G.px+14*u,sy=G.py+top,hy=sy+22*u,hdrH=Math.max(32*u,G.big?44*DPRS:0);
+  ctx.save();ctx.font='bold '+Math.round(17*u)+'px '+FONT;const tw=ctx.measureText('\u2039 TOKENS').width,fz=hdrH*.92;ctx.imageSmoothingEnabled=false;ctx.drawImage(TOK8_FACE.big,sx+10*u+tw+8*u,hy+(hdrH-fz)/2,fz,fz);ctx.restore();}catch(e){}})(drawPhone);
 startGame=(o=>function(){TK8.banner=null;TK8.fx=[];TK8.near=1e9;TK8.stash=null;for(const k in TK8.stats)TK8.stats[k]=0;return o.apply(this,arguments);})(startGame);
-window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get tok(){return{TK8,TOK8_MS,TOK8_PLAN,TOK8_TOTAL,TOK8_SCALE,TKR,tokBuild,tokTake,tokCount,tokDist,tokNextMs,tokView,tokStashPos,tokHome,tokCarTick};}}));
+window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get tok(){return{TK8,TOK8_MS,TOK8_PLAN,TOK8_TOTAL,TOK8_SCALE,TOK8_LOOK,TOK8_FACE,drawTok8,TKR,tokBuild,tokTake,tokCount,tokDist,tokNextMs,tokView,tokStashPos,tokHome,tokCarTick};}}));
 drawCar=(o=>function(c){o(c);if(!c.tok8Gold||c.wreck)return;try{g.save();g.translate(c.x,c.y);g.rotate(c.a);g.fillStyle='#4a2c00';drawStarPath(g,0,0,c.W*.42);g.fill();g.fillStyle='#fff4b0';drawStarPath(g,0,0,c.W*.32);g.fill();g.restore();
   const t=gtime;for(let i=0;i<2;i++){const a=t*1.3+i*PI,rr=c.L*.55,sx=c.x+Math.cos(a)*rr,sy=c.y+Math.sin(a)*rr*.6,s=1.5+2*Math.max(0,Math.sin(t*4.5+i*2));g.fillStyle='#fff';g.fillRect(sx-s,sy-.6,2*s,1.2);g.fillRect(sx-.6,sy-s,1.2,2*s);}}catch(e){}})(drawCar);
 
