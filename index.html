@@ -1719,7 +1719,9 @@ Object.defineProperties(window.__game.dbg,Object.getOwnPropertyDescriptors({get 
 //  v3m: touchscreen controls (virtual sticks, buttons, tappable menus)
 // ======================================================================
 var TOUCHUI, DPRS=1, CVL=0, CVT=0, TOUCHCAP=false;
-function touchPrefs(){let o={};try{o=JSON.parse(localStorage.getItem('pta_touch')||'{}')||{};}catch(e){}return{mode:o.mode||'auto',steer:o.steer||'dir',vib:o.vib!==false,zoom:o.zoom|0};}
+function touchPrefs(){let o={};try{o=JSON.parse(localStorage.getItem('pta_touch')||'{}')||{};}catch(e){}return{mode:o.mode||'auto',steer:o.steer||'dir',vib:o.vib!==false,zoom:o.zoom|0,steerS:Math.min(10,Math.max(1,(o.steerS|0)||5)),steerD:Math.min(2,Math.max(1,+o.steerD||1.4))};}
+const STEER_DEF={s:5,d:1.4,dz:.14},STEER_DBG={};
+function joyR(){const R=TS.JR||58*DPRS;if(!player.inCar||!TOUCHUI)return R;return Math.min(R*steerParams().mul,Math.min(W,H)*.3);}
 function resize(){
   try{TOUCHCAP=(window.matchMedia&&matchMedia('(pointer: coarse)').matches)||('ontouchstart' in window);}catch(e){TOUCHCAP=false;}
   if(TOUCHUI===undefined){const pr=touchPrefs();TOUCHUI=pr.mode==='on'||(pr.mode==='auto'&&TOUCHCAP);}
@@ -1802,9 +1804,9 @@ function onTouchStart(e){e.preventDefault();TS.lastTouch=performance.now();if(TS
     if(x<W*.42&&!TS.joy)TS.joy={id,ox:x,oy:y,x,y,vx:0,vy:0,l:0};
     else if(x>=W*.42&&!TS.aim)TS.aim={id,ox:x,oy:y,x,y,vx:0,vy:0,l:0};}}
 function stickMove(s,x,y,R){s.x=x;s.y=y;let dx=x-s.ox,dy=y-s.oy,d=Math.hypot(dx,dy);if(d>R){s.ox=x-dx/d*R;s.oy=y-dy/d*R;dx=x-s.ox;dy=y-s.oy;d=R;}s.vx=dx/R;s.vy=dy/R;s.l=d/R;}
-function onTouchMove(e){e.preventDefault();if(!TOUCHUI)return;const R=TS.JR||58*DPRS;
+function onTouchMove(e){e.preventDefault();if(!TOUCHUI)return;const R=TS.JR||58*DPRS,RJ=joyR();
   for(const t of e.changedTouches){const [x,y]=tpos(t),id=t.identifier;
-    if(TS.joy&&TS.joy.id===id)stickMove(TS.joy,x,y,R);
+    if(TS.joy&&TS.joy.id===id)stickMove(TS.joy,x,y,RJ);
     else if(TS.aim&&TS.aim.id===id)stickMove(TS.aim,x,y,R);
     else if(TS.menuDrag&&TS.menuDrag.id===id){const d=TS.menuDrag,step=(menu?30:26)*U;if(Math.abs(y-d.y0)>10*DPRS||Math.abs(x-d.x0)>10*DPRS)d.moved=true;
       while(y-d.ly>step){d.ly+=step;onPress('ArrowUp');}while(d.ly-y>step){d.ly-=step;onPress('ArrowDown');}}}}
@@ -1837,19 +1839,23 @@ moveOnFoot=(function(orig){return function(dt,collide){const j=TS.joy;if(!TOUCHU
   if(sprint&&buffs.stam<=0)p.stam=Math.max(0,p.stam-28*dt);else if(!sprint)p.stam=Math.min(stamMax(),p.stam+(16+3*stats.stam)*dt);
   p.x+=mx*spd*dt;p.y+=my*spd*dt;p.vx=mx*spd;p.vy=my*spd;collide();p.walk+=dt*(sprint?28:20*(spd/100));
   return{l:1,mx,my,k:inputDir()};};})(moveOnFoot);
-updatePlayer=(function(orig){return function(dt){orig(dt);const c=player.inCar,j=TS.joy;if(!TOUCHUI||!c||!j||phone.open||menu)return;
-  if(j.l<.15){c.th=0;c.st=0;c._rev=false;return;}
-  const l=Math.min(1,j.l),nx=j.vx,ny=j.vy;
-  if(TS.pref.steer==='tank'){c.th=ny<-.25?Math.min(1,-ny*1.4):ny>.25?-Math.min(1,ny*1.4):0;c.st=Math.abs(nx)>.15?clamp(nx*1.4,-1,1):0;return;}
-  const ta=Math.atan2(ny,nx),diff=angDiff(ta,c.a),vf=c.vx*Math.cos(c.a)+c.vy*Math.sin(c.a);
-  if(c._rev&&Math.abs(diff)<1.25)c._rev=false;else if(!c._rev&&Math.abs(diff)>2.05&&vf<60)c._rev=true;
-  if(c._rev){const db=angDiff(ta,c.a+PI);c.th=-Math.min(1,.45+l);c.st=-clamp(db*2.2,-1,1);}
-  else if(Math.abs(diff)>2.05){c.th=-1;c.st=clamp(diff*2.2,-1,1);}
-  else{c.th=Math.min(1,.35+l)*(Math.abs(diff)>1.3&&vf>150?.3:1);c.st=clamp(diff*2.2,-1,1);}};})(updatePlayer);
+// touch driving: deadzone + longer stick travel + expo response + steering ramp, tuned by STEER sensitivity (1..10)
+function steerParams(){const P=TS.pref,s=clamp(P.steerS|0||STEER_DEF.s,1,10),t=(s-1)/9;return{s,t,dz:STEER_DEF.dz,full:1.25-.8*t,e:1.6-.6*t,xFull:.95-.25*t,rate:3+9*t,mul:clamp(+P.steerD||STEER_DEF.d,1,2)};}
+function steerCurve(x,e){const a=Math.min(1,Math.abs(x));return Math.sign(x)*Math.pow(a,e);}
+updatePlayer=(function(orig){return function(dt){orig(dt);const c=player.inCar,j=TS.joy;if(!TOUCHUI||!c||phone.open||menu){if(c)c._tst=0;return;}if(!j){c._tst=0;return;}
+  const P=steerParams();if(j.l<P.dz){c.th=0;c.st=0;c._tst=0;c._rev=false;return;}
+  const l=Math.min(1,j.l),mag=Math.min(1,(l-P.dz)/(1-P.dz)),nx=j.vx,ny=j.vy;let tst;
+  if(TS.pref.steer==='tank'){c.th=ny<-.25?Math.min(1,-ny*1.4):ny>.25?-Math.min(1,ny*1.4):0;const ax=Math.abs(nx);tst=ax<P.dz?0:Math.sign(nx)*Math.pow(Math.min(1,(ax-P.dz)/(P.xFull-P.dz)),P.e);}
+  else{const ta=Math.atan2(ny,nx),diff=angDiff(ta,c.a),vf=c.vx*Math.cos(c.a)+c.vy*Math.sin(c.a),f=.45+.55*mag;
+    if(c._rev&&Math.abs(diff)<1.25)c._rev=false;else if(!c._rev&&Math.abs(diff)>2.05&&vf<60)c._rev=true;
+    if(c._rev){const db=angDiff(ta,c.a+PI);c.th=-Math.min(1,.45+l);tst=-steerCurve(db/P.full,P.e);}
+    else if(Math.abs(diff)>2.05){c.th=-1;tst=Math.sign(diff);}
+    else{c.th=Math.min(1,.35+l)*(Math.abs(diff)>1.3&&vf>150?.3:1);tst=steerCurve(diff/P.full,P.e)*(Math.abs(diff)>1.3?1:f);}}
+  const cur=c._tst||0,back=Math.abs(tst)<Math.abs(cur)||tst*cur<0,r=P.rate*(back?1.8:1)*dt;c._tst=cur+clamp(tst-cur,-r,r);c.st=c._tst;STEER_DBG.tst=tst;STEER_DBG.st=c.st;STEER_DBG.l=l;};})(updatePlayer);
 hurtPlayer=(function(orig){return function(d){const h=player.hp+player.armor;orig(d);if(player.hp+player.armor<h)buzz(d>14?55:22);};})(hurtPlayer);
 explode=(function(orig){return function(c){orig(c);if(c&&Math.hypot(c.x-player.x,c.y-player.y)<320)buzz(110);};})(explode);
 // --- overlay drawing ---
-function drawStick(s,ghost,x,y,lbl,col){const D=DPRS,R=TS.JR||58*D;ctx.save();
+function drawStick(s,ghost,x,y,lbl,col){const D=DPRS,R=((s&&s===TS.joy)||(ghost&&lbl==='DRIVE'))?joyR():(TS.JR||58*D);ctx.save();
   if(ghost){ctx.globalAlpha=.22;ctx.strokeStyle='#fff';ctx.lineWidth=2*D;ctx.setLineDash([6*D,6*D]);ctx.beginPath();ctx.arc(x,y,R,0,TAU);ctx.stroke();ctx.setLineDash([]);
     ctx.globalAlpha=.4;ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold '+Math.round(12*D)+'px '+FONT;ctx.fillText(lbl,x,y);ctx.restore();return;}
   ctx.fillStyle='rgba(0,0,0,.25)';ctx.strokeStyle='rgba(255,255,255,.45)';ctx.lineWidth=2.5*D;ctx.beginPath();ctx.arc(s.ox,s.oy,R,0,TAU);ctx.fill();ctx.stroke();
@@ -1858,7 +1864,7 @@ function drawStick(s,ghost,x,y,lbl,col){const D=DPRS,R=TS.JR||58*D;ctx.save();
   ctx.strokeStyle='rgba(0,0,0,.4)';ctx.stroke();ctx.restore();}
 function drawTouch(){const D=DPRS;layoutTouch();ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';
   const play=(state==='play'||state==='dead')&&!menu&&!phone.open;
-  if(play&&!fade){if(TS.joy)drawStick(TS.joy);else drawStick(null,true,W*.15,H-(TS.JR||58*D)-26*D,player.inCar?'DRIVE':'MOVE');
+  if(play&&!fade){if(TS.joy)drawStick(TS.joy);else{const RG=joyR();drawStick(null,true,Math.max(W*.15,RG+14*D),H-RG-26*D,player.inCar?'DRIVE':'MOVE');}
     if(TS.aim)drawStick(TS.aim,false,0,0,'',true);else drawStick(null,true,W-(TS.B||60*D)*3.55,H-(TS.JR||58*D)-26*D,'AIM/FIRE');}
   for(const b of TS.btns){const held=b._down||Object.values(TS.held).some(h=>h.id===b.id);ctx.globalAlpha=b.dim?.5:1;
     if(b.rect){const [x,y,w,h]=b.rect;ctx.fillStyle=held?'rgba(255,210,58,.55)':'rgba(0,0,0,.55)';uiRRect(ctx,x,y,w,h,12*D);ctx.fill();ctx.strokeStyle='#ffd23a';ctx.lineWidth=2.5*D;ctx.stroke();
@@ -4762,5 +4768,25 @@ startGame=(o=>function(){TK8.banner=null;TK8.fx=[];TK8.near=1e9;TK8.stash=null;f
 window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get tok(){return{TK8,TOK8_MS,TOK8_PLAN,TOK8_TOTAL,TKR,tokBuild,tokTake,tokCount,tokDist,tokNextMs,tokView,tokStashPos,tokHome,tokCarTick};}}));
 drawCar=(o=>function(c){o(c);if(!c.tok8Gold||c.wreck)return;try{g.save();g.translate(c.x,c.y);g.rotate(c.a);g.fillStyle='#4a2c00';drawStarPath(g,0,0,c.W*.42);g.fill();g.fillStyle='#fff4b0';drawStarPath(g,0,0,c.W*.32);g.fill();g.restore();
   const t=gtime;for(let i=0;i<2;i++){const a=t*1.3+i*PI,rr=c.L*.55,sx=c.x+Math.cos(a)*rr,sy=c.y+Math.sin(a)*rr*.6,s=1.5+2*Math.max(0,Math.sin(t*4.5+i*2));g.fillStyle='#fff';g.fillRect(sx-s,sy-.6,2*s,1.2);g.fillRect(sx-.6,sy-s,1.2,2*s);}}catch(e){}})(drawCar);
+
+// ======================================================================
+//  v6s: PHONE > SYSTEM > STEERING - touch driving sensitivity (1..10)
+//  and stick drag distance (100%..200%), saved on this device
+//  (localStorage 'pta_touch'). Logic lives in v3m (steerParams).
+// ======================================================================
+function steerName(s){return s<=3?'LOW':s<=7?'MEDIUM':'HIGH';}
+function steerSet(k,v){const P=TS.pref;if(k==='s')P.steerS=clamp(Math.round(v),1,10);else P.steerD=clamp(Math.round(v*10)/10,1,2);saveTouchPrefs();}
+function steerView(v){const P=TS.pref,sp=steerParams();v.title='STEERING';
+  v.lines.push(TOUCHUI?'Tap \u2212 / + to adjust. Try it right away.':'For touch screens (iPad / phone). Keys and gamepad are not affected.');
+  v.items.push({label:'Sensitivity',sub:steerName(sp.s)+(sp.s===STEER_DEF.s?' (default)':''),right:String(sp.s),adj:d=>steerSet('s',sp.s+d),act:()=>steerSet('s',sp.s>=10?1:sp.s+1)});
+  v.items.push({label:'Drag distance',sub:sp.mul<=1.05?'Short (classic)':sp.mul>=1.75?'Long thumb travel':'Medium'+(Math.abs(sp.mul-STEER_DEF.d)<.01?' (default)':''),right:Math.round(sp.mul*100)+'%',adj:d=>steerSet('d',sp.mul+d*.1),act:()=>steerSet('d',sp.mul>=1.95?1:sp.mul+.1)});
+  v.items.push({label:'Style: '+(P.steer==='dir'?'POINT & DRIVE':'GAS / STEER'),sub:P.steer==='dir'?'Point where to go':'Up = gas, left/right = steer',act:()=>{P.steer=P.steer==='dir'?'tank':'dir';saveTouchPrefs();}});
+  v.items.push({label:'Reset steering',sub:'Sensitivity '+STEER_DEF.s+', drag '+Math.round(STEER_DEF.d*100)+'%',act:()=>{P.steerS=STEER_DEF.s;P.steerD=STEER_DEF.d;saveTouchPrefs();msg('STEERING RESET','#8cf',1.2);}});
+  v.items.push({label:'\u2039 Back to System',act:()=>{phone.app='system';phone.sel=0;}});
+  v.foot.push('Lower = gentler steering.','Saved on this device.');}
+touchSysItems=(o=>function(){const L=o();L.unshift({label:'Steering  \u203a',right:steerName(steerParams().s),act:()=>{phone.app='steering';phone.sel=0;}});return L;})(touchSysItems);
+phoneView=(o=>function(){if(phone.app==='steering'){const v={title:'STEERING',lines:[],items:[],foot:[]};steerView(v);return v;}return o();})(phoneView);
+phoneKey=(o=>function(code){if(phone.app==='steering'&&(code==='Escape'||code==='Backspace')){phone.app='system';phone.sel=0;return;}return o(code);})(phoneKey);
+window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get steer(){return{params:steerParams(),def:STEER_DEF,dbg:STEER_DBG,set:steerSet,name:steerName,joyR,touchPrefs};}}));
 
 </script></body></html>
