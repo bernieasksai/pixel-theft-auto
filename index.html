@@ -4599,6 +4599,150 @@ startGame=(o=>function(){V7.task=null;V7.offers=null;V7.offerT=30;V7.turf=null;V
 window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get rep(){return{V7,GW7,GANGS7,GRT7,RP,gwAdd,gAdd,gwTier,gwName,gTier,turf7,noShoot7,r7MakeOffers,r7Accept,r7Done,r7Cancel,r7View,r7GangMember,gwPerks};}}));
 
 // ======================================================================
+//  v6n: BUILDING NOOKS + HIDDEN PASSAGES + FAKE-WALL COURTYARDS
+//  Carves small recesses into building sides (1x1 / 1x2, some roofed
+//  over), a few covered arcades straight through deep buildings, and a
+//  few secret courtyards reached through a fake wall you can walk through.
+//  Carved buildings are drawn as grouped pieces; when you are tucked under
+//  a roof (or a token is), that roof is cut away locally, GTA2-style.
+//  Tokens + home stash are now drawn BEFORE buildings so roofs cover them.
+// ======================================================================
+const NK8={ready:false,groups:[],nooks:[],arcades:[],courts:[],spots:[],cellSet:new Set(),stats:{nooks:0,arcades:0,courts:0,pieces:0,cells:0},cutR:40,fadeA:.78,cutOn:true,dbg:{holes:0}};
+function nkBuild(){if(NK8.ready)return;NK8.ready=true;try{
+  const rnd=mulberry32(8181),NN=N*N,BR=i=>!!(typeof BRIDGE5!=='undefined'&&BRIDGE5&&BRIDGE5[i]);
+  const at=(x,y)=>(x<0||y<0||x>=N||y>=N)?BLD:map[y*N+x];
+  const OUT=new Set([SIDE,ALLEY,GRASS,LOT,SAND,DOCK]),WALK=new Set([ROAD,SIDE,ALLEY,GRASS,LOT,SAND,DOCK,FIELD,DIRT]);
+  const bad=[];for(const o of pois){if(o.spot)bad.push(o.spot);if(o.door)bad.push(o.door);}if(typeof atms!=='undefined')for(const a of atms)bad.push(a);for(const c of cams)bad.push(c);
+  const sx=5*P-1,sy=4*P+6;
+  const clear=(tx,ty)=>{const x=tx*T+T/2,y=ty*T+T/2;for(const b of bad)if(Math.abs(b.x-x)<60&&Math.abs(b.y-y)<60)return false;for(const tr of trees)if(Math.abs(tr.x-x)<tr.r+12&&Math.abs(tr.y-y)<tr.r+12)return false;return (tx-sx)**2+(ty-sy)**2>=64;};
+  // outside tile next to the opening: walkable, not road / bridge, and one more walkable tile beyond it
+  const outOK=(x,y,dx,dy)=>{const i=y*N+x;if(x<1||y<1||x>=N-1||y>=N-1||BR(i))return false;return OUT.has(at(x,y))&&WALK.has(at(x+dx,y+dy))&&clear(x,y);};
+  const CITY=new Set(['DOWNTOWN','OLD TOWN','INDUSTRIAL','RIVERSIDE','BAYSIDE','MARINA','SOUTH BEACH','OCEAN DRIVE','PORT OF MIAMI']),names=DISTRICTS.map(d=>d.name);
+  const CAPN={'DOWNTOWN':5,'OLD TOWN':5,'INDUSTRIAL':4,'RIVERSIDE':5,'BAYSIDE':3,'MARINA':2,'SOUTH BEACH':3,'OCEAN DRIVE':2,'PORT OF MIAMI':4};
+  const CAPA={'OLD TOWN':1,'RIVERSIDE':1,'SOUTH BEACH':1,'DOWNTOWN':1,'BAYSIDE':1},CAPC={'DOWNTOWN':1,'INDUSTRIAL':1,'PORT OF MIAMI':1,'RIVERSIDE':1};
+  const cnt={n:{},a:{},c:{}};const SIDES=[[0,-1],[0,1],[-1,0],[1,0]];// N S W E (matches wall side ids)
+  const cand=buildings.filter(bd=>!bd.heli&&!bd.rural&&!bd.ship5&&bd.h>=.07);
+  for(let i=cand.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[cand[i],cand[j]]=[cand[j],cand[i]];}
+  for(const bd of cand){const tx0=Math.round(bd.x0/T),ty0=Math.round(bd.y0/T),w=Math.round((bd.x1-bd.x0)/T),h=Math.round((bd.y1-bd.y0)/T);
+    if(w<3||h<3||tx0*T!==bd.x0||ty0*T!==bd.y0)continue;const dn=names[distAt5((bd.x0+bd.x1)/2,(bd.y0+bd.y1)/2)];if(!CITY.has(dn))continue;
+    let allB=true;for(let y=0;y<h&&allB;y++)for(let x=0;x<w;x++)if(at(tx0+x,ty0+y)!==BLD){allB=false;break;}if(!allB)continue;
+    const C=new Uint8Array(w*h).fill(1),feats=[];const cell=(x,y)=>C[y*w+x];
+    // outside tile + step for local cell (x,y) on side s
+    const outside=(s,x,y)=>s===0?[tx0+x,ty0-1]:s===1?[tx0+x,ty0+h]:s===2?[tx0-1,ty0+y]:[tx0+w,ty0+y];
+    const doorSide=bd.poi?bd.poi.side:-1;
+    // -- courtyard behind a fake wall (big plain buildings only)
+    if(!bd.poi&&!bd.neon5&&w>=5&&h>=5&&(cnt.c[dn]||0)<(CAPC[dn]||0)&&rnd()<.8){
+      const cw=w>=7?3:2,ch=h>=7?3:2,cx=1+Math.floor(rnd()*(w-1-cw)),cy=1+Math.floor(rnd()*(h-1-ch));
+      const opts=[];for(let s=0;s<4;s++){const [dx,dy]=SIDES[s];// corridor along middle of court span
+        if(s<2){const x=cx+Math.floor(cw/2),[ox,oy]=outside(s,x,0);if(outOK(ox,oy,dx,dy))opts.push({s,x,y0:s===0?0:cy+ch,y1:s===0?cy-1:h-1});}
+        else{const y=cy+Math.floor(ch/2),[ox,oy]=outside(s,0,y);if(outOK(ox,oy,dx,dy))opts.push({s,y,x0:s===2?0:cx+cw,x1:s===2?cx-1:w-1});}}
+      if(opts.length){const o=opts[Math.floor(rnd()*opts.length)];for(let y=cy;y<cy+ch;y++)for(let x=cx;x<cx+cw;x++)C[y*w+x]=0;
+        if(o.s<2)for(let y=o.y0;y<=o.y1;y++)C[y*w+o.x]=3;else for(let x=o.x0;x<=o.x1;x++)C[o.y*w+x]=3;
+        const sp={x:bd.x0+(cx+(cw>2?1:0))*T+T/2,y:bd.y0+(cy+ch-1)*T+T/2};feats.push({k:'court',dn,spot:sp,side:o.s,bd});cnt.c[dn]=(cnt.c[dn]||0)+1;}}
+    // -- covered arcade straight through (non-POI, plain)
+    if(!feats.length&&!bd.poi&&!bd.neon5&&(cnt.a[dn]||0)<(CAPA[dn]||0)&&rnd()<.5){const vert=rnd()<.5,L=vert?w:h;
+      if(L>=3){const o=1+Math.floor(rnd()*(L-2));let ok;
+        if(vert){const [ax,ay]=outside(0,o,0),[bx,by]=outside(1,o,0);ok=outOK(ax,ay,0,-1)&&outOK(bx,by,0,1);if(ok)for(let y=0;y<h;y++)C[y*w+o]=2;}
+        else{const [ax,ay]=outside(2,0,o),[bx,by]=outside(3,0,o);ok=outOK(ax,ay,-1,0)&&outOK(bx,by,1,0);if(ok)for(let x=0;x<w;x++)C[o*w+x]=2;}
+        if(ok){const m=Math.floor((vert?h:w)/2),sp=vert?{x:bd.x0+o*T+T/2,y:bd.y0+m*T+T/2}:{x:bd.x0+m*T+T/2,y:bd.y0+o*T+T/2};feats.push({k:'arcade',dn,spot:sp,vert,bd});cnt.a[dn]=(cnt.a[dn]||0)+1;}}}
+    // -- recessed nooks (1x1 / 1x2, some roofed over)
+    const nTry=bd.poi?1:(w*h>=20?2:1);
+    for(let t=0;t<nTry&&(cnt.n[dn]||0)<(CAPN[dn]||0);t++){if(rnd()<.25)continue;const s=Math.floor(rnd()*4);if(s===doorSide)continue;const [dx,dy]=SIDES[s],len=s<2?w:h,dep=s<2?h:w;
+      const wn=len>=5&&rnd()<.45?2:1,o=1+Math.floor(rnd()*(len-1-wn));if(o<1||o+wn>len-1)continue;
+      const dp=dep>=5&&rnd()<.4?2:1;if(dep-dp<2)continue;const roofed=dp===2||rnd()<.6;
+      if(bd.poi&&bd.poi.door){const dx2=Math.floor(bd.poi.door.x/T)-tx0,dy2=Math.floor(bd.poi.door.y/T)-ty0;if(s<2?Math.abs(o-dx2)<=wn+1:Math.abs(o-dy2)<=wn+1)continue;}
+      const cells=[];let ok=true;
+      for(let a=0;a<wn&&ok;a++){const [ox,oy]=s<2?outside(s,o+a,0):outside(s,0,o+a);if(!outOK(ox,oy,dx,dy))ok=false;
+        for(let d=0;d<dp&&ok;d++){const x=s<2?o+a:(s===2?d:w-1-d),y=s<2?(s===0?d:h-1-d):o+a;if(cell(x,y)!==1)ok=false;
+          // keep one solid cell between features
+          for(const [ex,ey] of SIDES){const xx=x+ex,yy=y+ey;if(xx>=0&&yy>=0&&xx<w&&yy<h&&cell(xx,yy)!==1&&!cells.some(c=>c[0]===xx&&c[1]===yy))ok=false;}
+          cells.push([x,y,d]);}}
+      if(!ok)continue;for(const [x,y,d] of cells)C[y*w+x]=(dp===2?(d===1?2:0):(roofed?2:0));
+      const inner=cells.filter(c=>c[2]===dp-1),pc=inner[Math.floor(rnd()*inner.length)];
+      feats.push({k:'nook',dn,spot:{x:bd.x0+pc[0]*T+T/2,y:bd.y0+pc[1]*T+T/2},side:s,wn,dp,roofed,bd});cnt.n[dn]=(cnt.n[dn]||0)+1;}
+    if(!feats.length)continue;
+    // carve the map + split into rectangular pieces
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(C[y*w+x]!==1){map[(ty0+y)*N+tx0+x]=ALLEY;NK8.cellSet.add((ty0+y)*N+tx0+x);NK8.stats.cells++;}
+    const used=new Uint8Array(w*h),pcs=[];
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){const v=C[y*w+x];if(!v||used[y*w+x])continue;let x2=x;while(x2+1<w&&C[y*w+x2+1]===v&&!used[y*w+x2+1])x2++;
+      let y2=y;for(;;){if(y2+1>=h)break;let full=true;for(let xx=x;xx<=x2;xx++)if(C[(y2+1)*w+xx]!==v||used[(y2+1)*w+xx]){full=false;break;}if(!full)break;y2++;}
+      for(let yy=y;yy<=y2;yy++)for(let xx=x;xx<=x2;xx++)used[yy*w+xx]=1;pcs.push({cx0:x,cy0:y,cx1:x2,cy1:y2,t:v,x0:bd.x0+x*T,y0:bd.y0+y*T,x1:bd.x0+(x2+1)*T,y1:bd.y0+(y2+1)*T});}
+    bd.nk={w,h,C,pcs,feats,tx0,ty0,ca:0,holeT:0};NK8.groups.push(bd);NK8.stats.pieces+=pcs.length;
+    // roof boxes that would float over an open cell get dropped
+    if(bd.det)bd.nkDet=bd.det.filter(q=>{for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(!C[y*w+x]){const X=bd.x0+x*T,Y=bd.y0+y*T;if(q.x<X+T&&q.x+q.w>X&&q.y<Y+T&&q.y+q.h>Y)return false;}return true;});
+    for(const f of feats){NK8[f.k==='nook'?'nooks':f.k==='arcade'?'arcades':'courts'].push(f);NK8.spots.push({x:f.spot.x,y:f.spot.y,tx:Math.floor(f.spot.x/T),ty:Math.floor(f.spot.y/T),k:f.k,dn:f.dn,roofed:f.k==='nook'?f.roofed||f.dp===2:true,bd});}}
+  NK8.stats.nooks=NK8.nooks.length;NK8.stats.arcades=NK8.arcades.length;NK8.stats.courts=NK8.courts.length;
+  if(typeof chunkCache!=='undefined')chunkCache.clear();}catch(e){console.error('v6n build',e);}}
+nkBuild();
+// world-point -> carved group building (if inside its footprint)
+function nkGroupAt(x,y){for(const bd of NK8.groups)if(x>=bd.x0&&x<bd.x1&&y>=bd.y0&&y<bd.y1)return bd;return null;}
+function nkCovered(x,y){const bd=nkGroupAt(x,y);if(!bd)return false;const n=bd.nk,cx=Math.floor((x-bd.x0)/T),cy=Math.floor((y-bd.y0)/T);return n.C[cy*n.w+cx]>=2;}
+// ---------------------------------------------------------------- drawing
+function nkOpening(p0,p1,q0,q1,col){g.fillStyle='rgba(6,6,10,.72)';g.beginPath();g.moveTo(p0[0],p0[1]);g.lineTo(p1[0],p1[1]);g.lineTo(q1[0],q1[1]);g.lineTo(q0[0],q0[1]);g.closePath();g.fill();
+  const l=.72,a0=[p0[0]+(q0[0]-p0[0])*l,p0[1]+(q0[1]-p0[1])*l],a1=[p1[0]+(q1[0]-p1[0])*l,p1[1]+(q1[1]-p1[1])*l];g.fillStyle=col;g.beginPath();g.moveTo(a0[0],a0[1]);g.lineTo(a1[0],a1[1]);g.lineTo(q1[0],q1[1]);g.lineTo(q0[0],q0[1]);g.closePath();g.fill();
+  g.strokeStyle='rgba(0,0,0,.35)';g.lineWidth=1;g.beginPath();g.moveTo(a0[0],a0[1]);g.lineTo(a1[0],a1[1]);g.stroke();}
+function nkDrawGroup(bd){const n=bd.nk,h=bd.h,C=n.C,w=n.w,hh=n.h;const cellAt=(x,y)=>(x<0||y<0||x>=w||y>=hh)?-1:C[y*w+x];
+  g.setTransform(1,0,0,1,0,0);
+  // walls: per piece side, per cell segment
+  for(const p of n.pcs){const sides=[];if(camY<p.y0)sides.push(0);if(camY>p.y1)sides.push(1);if(camX<p.x0)sides.push(2);if(camX>p.x1)sides.push(3);
+    for(const s of sides){const horiz=s<2,a0=horiz?p.cx0:p.cy0,a1=horiz?p.cx1:p.cy1;let segK=null,segA=a0;
+      const kindAt=a=>{const nb=s===0?cellAt(a,p.cy0-1):s===1?cellAt(a,p.cy1+1):s===2?cellAt(p.cx0-1,a):cellAt(p.cx1+1,a);if(nb>0)return 0;return p.t===2?2:1;};
+      const flush=(A,B,k)=>{if(!k)return;let X0,Y0,X1,Y1;if(horiz){X0=bd.x0+A*T;X1=bd.x0+(B+1)*T;Y0=Y1=s===0?p.y0:p.y1;}else{Y0=bd.y0+A*T;Y1=bd.y0+(B+1)*T;X0=X1=s===2?p.x0:p.x1;}
+        const g0=Pj(X0,Y0,0),g1=Pj(X1,Y1,0),r0=Pj(X0,Y0,h),r1=Pj(X1,Y1,h),col=s===0?bd.wN:s===1?bd.wS:s===2?bd.wW:bd.wE;
+        if(k===2)nkOpening(g0,g1,r0,r1,col);
+        else{const len=horiz?X1-X0:Y1-Y0,dx=bd.poi&&bd.poi.side===s&&bd.poi.door&&(horiz?bd.poi.door.x>=X0&&bd.poi.door.x<=X1&&Math.abs(bd.poi.door.y-Y0)<2:bd.poi.door.y>=Y0&&bd.poi.door.y<=Y1&&Math.abs(bd.poi.door.x-X0)<2);
+          wall(g0,g1,r0,r1,col,{floors:bd.floors,seed:bd.seed+A*7,poi:dx?bd.poi:null,x0:X0,y0:Y0},len,s);
+          if(p.t===3){g.strokeStyle='rgba(0,0,0,.16)';g.lineWidth=1;const m=[(g0[0]+g1[0]+r0[0]+r1[0])/4,(g0[1]+g1[1]+r0[1]+r1[1])/4];g.beginPath();g.moveTo(m[0]-2,m[1]-5);g.lineTo(m[0]+1,m[1]);g.lineTo(m[0]-1,m[1]+4);g.stroke();}}};
+      for(let a=a0;a<=a1;a++){const k=kindAt(a);if(k!==segK){flush(segA,a-1,segK);segK=k;segA=a;}}flush(segA,a1,segK);}}
+  // roofs
+  setWorld(h);for(const p of n.pcs){const W2=p.x1-p.x0,H2=p.y1-p.y0;g.fillStyle=bd.rim;g.fillRect(p.x0,p.y0,W2,H2);
+    const inT=(s)=>{for(let a=(s<2?p.cx0:p.cy0);a<=(s<2?p.cx1:p.cy1);a++){const nb=s===0?cellAt(a,p.cy0-1):s===1?cellAt(a,p.cy1+1):s===2?cellAt(p.cx0-1,a):cellAt(p.cx1+1,a);if(nb<=0)return 4;}return 0;};
+    const iN=inT(0),iS=inT(1),iW=inT(2),iE=inT(3);g.fillStyle=bd.roof;g.fillRect(p.x0+iW,p.y0+iN,W2-iW-iE,H2-iN-iS);
+    g.fillStyle='rgba(0,0,0,.08)';for(let y=bd.y0+12;y<bd.y1-6;y+=16)if(y>=p.y0+iN&&y<p.y1-iS)g.fillRect(p.x0+iW,y,W2-iW-iE,1);}
+  for(const q of (bd.nkDet||bd.det)){g.fillStyle='rgba(0,0,0,.28)';g.fillRect(q.x+3,q.y+3,q.w,q.h);g.fillStyle=q.c;g.fillRect(q.x,q.y,q.w,q.h);g.fillStyle='rgba(255,255,255,.18)';g.fillRect(q.x,q.y,q.w,2);g.fillStyle='rgba(0,0,0,.25)';g.fillRect(q.x+2,q.y+q.h/2,q.w-4,1);}
+  if(bd.poi)drawRoofSign(bd);g.setTransform(1,0,0,1,0,0);}
+function nkDrawPlain(bd){const h=bd.h;g.setTransform(1,0,0,1,0,0);
+  const a=Pj(bd.x0,bd.y0,0),b2=Pj(bd.x1,bd.y0,0),c=Pj(bd.x1,bd.y1,0),d=Pj(bd.x0,bd.y1,0),a2=Pj(bd.x0,bd.y0,h),bb2=Pj(bd.x1,bd.y0,h),c2=Pj(bd.x1,bd.y1,h),d2=Pj(bd.x0,bd.y1,h);
+  if(camY<bd.y0)wall(a,b2,a2,bb2,bd.wN,bd,bd.x1-bd.x0,0);
+  if(camY>bd.y1)wall(d,c,d2,c2,bd.wS,bd,bd.x1-bd.x0,1);
+  if(camX<bd.x0)wall(a,d,a2,d2,bd.wW,bd,bd.y1-bd.y0,2);
+  if(camX>bd.x1)wall(b2,c,bb2,c2,bd.wE,bd,bd.y1-bd.y0,3);
+  setWorld(h);const w=bd.x1-bd.x0,hh=bd.y1-bd.y0;g.fillStyle=bd.rim;g.fillRect(bd.x0,bd.y0,w,hh);g.fillStyle=bd.roof;g.fillRect(bd.x0+4,bd.y0+4,w-8,hh-8);
+  g.fillStyle='rgba(0,0,0,.08)';for(let y=bd.y0+12;y<bd.y1-6;y+=16)g.fillRect(bd.x0+4,y,w-8,1);
+  for(const q of bd.det){g.fillStyle='rgba(0,0,0,.28)';g.fillRect(q.x+3,q.y+3,q.w,q.h);g.fillStyle=q.c;g.fillRect(q.x,q.y,q.w,q.h);g.fillStyle='rgba(255,255,255,.18)';g.fillRect(q.x,q.y,q.w,2);g.fillStyle='rgba(0,0,0,.25)';g.fillRect(q.x+2,q.y+q.h/2,q.w-4,1);}
+  if(bd.poi)drawRoofSign(bd);
+  if(bd.heli){const cx=(bd.x0+bd.x1)/2+20,cy=(bd.y0+bd.y1)/2+20;g.fillStyle='#3a3a3a';g.beginPath();g.arc(cx,cy,34,0,TAU);g.fill();g.strokeStyle='#e8d040';g.lineWidth=3;g.beginPath();g.arc(cx,cy,28,0,TAU);g.stroke();
+    g.fillStyle='#eee';g.fillRect(cx-12,cy-14,5,28);g.fillRect(cx+7,cy-14,5,28);g.fillRect(cx-7,cy-2.5,14,5);}
+  g.setTransform(1,0,0,1,0,0);}
+// tokens + stash on the ground, under the buildings
+function nkDrawGroundToks(){if(interior||typeof tokBuild!=='function')return;try{setWorld(0);const R=TKR();for(const k of tokBuild())if(!R.got[k.key]&&inView(k.x,k.y,30))drawTok8(k);
+  if(R.ms[10]){const s=tokStashPos();if(s&&inView(s.x,s.y,30))drawStash8(s,R.stashCd<=0);}g.setTransform(1,0,0,1,0,0);}catch(e){}}
+// which world points should see through this group's roof right now
+function nkHoles(bd){const out=[],me=player.inCar||player;if(state!=='play'&&state!=='dead')return out;
+  const n=bd.nk,pad=6,inside=me.x>bd.x0-pad&&me.x<bd.x1+pad&&me.y>bd.y0-pad&&me.y<bd.y1+pad;
+  // you: only when actually under a roof piece (a roofed nook, arcade or the fake-wall corridor)
+  if(inside){let cov=false;for(const [ox,oy] of[[0,0],[7,0],[-7,0],[0,7],[0,-7]])if(nkCovered(me.x+ox,me.y+oy)){cov=true;break;}if(cov)out.push({x:me.x,y:me.y,r:1});}
+  if(typeof TK8!=='undefined'&&TK8.list){const R=TKR();for(const k of TK8.list){if(R.got[k.key]||k.x<bd.x0||k.x>bd.x1||k.y<bd.y0||k.y>bd.y1)continue;const d=Math.hypot(k.x-me.x,k.y-me.y);if(d<120&&(nkCovered(k.x,k.y)||!inside))out.push({x:k.x,y:k.y,r:.75});}}
+  return out;}
+let _nkLT=0;
+drawBuildings=(o=>function(){nkDrawGroundToks();if(typeof W4!=='undefined'&&W4.gas.length)w4DrawCanopies();
+  const now=rtNow(),dt=Math.min(.1,Math.max(0,now-_nkLT));_nkLT=now;const vis=[];NK8.dbg.holes=0;
+  for(const bd of buildings){if(bd.x1<vx0-4||bd.x0>vx1+4||bd.y1<vy0-4||bd.y0>vy1+4)continue;const cx=(bd.x0+bd.x1)/2-camX,cy=(bd.y0+bd.y1)/2-camY;bd._d=cx*cx+cy*cy;vis.push(bd);}
+  vis.sort((a,b)=>b._d-a._d);
+  for(const bd of vis){if(!bd.nk){nkDrawPlain(bd);continue;}const n=bd.nk,H=NK8.cutOn?nkHoles(bd):[];n.ca+=((H.length?1:0)-n.ca)*Math.min(1,dt*9);if(H.length)n.last=H;
+    const HH=H.length?H:(n.ca>.03?n.last||[]:[]);
+    if(!HH.length||n.ca<.03){nkDrawGroup(bd);continue;}
+    g.save();g.setTransform(1,0,0,1,0,0);const hs=[];
+    for(const q of HH){const p0=Pj(q.x,q.y,0),p1=Pj(q.x,q.y,bd.h),f=.35,mx=p0[0]+(p1[0]-p0[0])*f,my=p0[1]+(p1[1]-p0[1])*f,r=(Math.hypot(p1[0]-p0[0],p1[1]-p0[1])*f+NK8.cutR*q.r*S)*(.35+.65*n.ca);hs.push([mx,my,r]);
+      const cp=new Path2D();cp.rect(-10,-10,LW+20,LH+20);cp.arc(mx,my,r,0,TAU);g.clip(cp,'evenodd');}
+    NK8.dbg.holes+=hs.length;nkDrawGroup(bd);g.restore();
+    // ghost of the roof inside the hole, so it reads as see-through rather than a black pit
+    g.save();g.setTransform(1,0,0,1,0,0);const up=new Path2D();for(const [mx,my,r] of hs){up.moveTo(mx+r,my);up.arc(mx,my,r,0,TAU);}g.clip(up);g.globalAlpha=1-NK8.fadeA*n.ca;nkDrawGroup(bd);g.restore();g.setTransform(1,0,0,1,0,0);
+    g.lineWidth=Math.max(1,1.6*S);for(const [mx,my,r] of hs){g.strokeStyle='rgba(255,255,255,'+(.22*n.ca)+')';g.beginPath();g.arc(mx,my,r,0,TAU);g.stroke();}}
+  g.setTransform(1,0,0,1,0,0);})(drawBuildings);
+window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get nk(){return{NK8,nkBuild,nkGroupAt,nkCovered,nkHoles};}}));
+
+// ======================================================================
 //  v6t: HIDDEN TOKENS - 56 spinning gold tokens tucked all over Miami
 //  (alleys, tucked corners, parks, dock ends, beside the causeways,
 //  the beach, open water by boat, a few short swims). GTA2-style
@@ -4607,21 +4751,21 @@ window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescri
 // ======================================================================
 const TOK8_TOTAL=56;
 const TOK8_PLAN=[
-  ['DOWNTOWN',['alley','corner','alley','park','corner','alley']],
-  ['OLD TOWN',['alley','corner','park','alley','corner']],
-  ['INDUSTRIAL',['lot','alley','corner','lot','alley']],
-  ['RIVERSIDE',['park','alley','river','corner','alley']],
+  ['DOWNTOWN',['nook','corner','alley','court','nook','arcade']],
+  ['OLD TOWN',['nook','corner','park','nook','arcade']],
+  ['INDUSTRIAL',['lot','nook','corner','court','nook']],
+  ['RIVERSIDE',['park','nook','river','arcade','court']],
   ['PIXEL COUNTY',['field','field','field','corner','park','field']],
-  ['BAYSIDE',['alley','corner','park','shore']],
-  ['MARINA',['dock','dock','corner']],
-  ['SOUTH BEACH',['alley','corner','shore','causeway']],
-  ['OCEAN DRIVE',['dock','beach','corner']],
+  ['BAYSIDE',['nook','arcade','park','shore']],
+  ['MARINA',['dock','dock','nook']],
+  ['SOUTH BEACH',['nook','corner','shore','causeway']],
+  ['OCEAN DRIVE',['dock','beach','nook']],
   ['SOUTH BEACH SANDS',['beach','beach','swim','beach']],
-  ['PORT OF MIAMI',['lot','lot','corner','dock','alley']],
+  ['PORT OF MIAMI',['lot','nook','corner','dock','court']],
   ['BISCAYNE BAY',['causeway','causeway','boat','dock']],
   ['ATLANTIC OCEAN',['boat','swim']]];
-const TOK8_HINT={alley:'alleys',corner:'corners',park:'parks',lot:'lots',field:'fields',river:'riverbank',shore:'waterfront',dock:'dock ends',beach:'the beach',causeway:'causeway',swim:'swim out',boat:'open water'};
-const TOK8_WATER={causeway:1,swim:1,boat:1};
+const TOK8_HINT={nook:'nooks in walls',arcade:'passages',court:'behind fake walls',alley:'alleys',corner:'corners',park:'parks',lot:'lots',field:'fields',river:'riverbank',shore:'waterfront',dock:'dock ends',beach:'the beach',causeway:'causeway',swim:'swim out',boat:'open water'};
+const TOK8_WATER={causeway:1,swim:1,boat:1};const TOK8_SECRET={nook:1,arcade:1,court:1};
 const TOK8_MS=[
   {n:5,name:'$1,000 cash',sub:'Paid on the spot',sub2:'',fn:()=>addMoney(1000)},
   {n:10,name:'Weapon stash at home',sub:'Uzi, shotgun, health',sub2:'At YOUR PLACE, refills every 10 min',fn:()=>{TKR().stashCd=0;}},
@@ -4636,7 +4780,10 @@ const TOK8_MS=[
   {n:56,name:'TOKEN MASTER',sub:'$50,000 + fireworks',sub2:'Plus +25 health, armor, goodwill',fn:()=>tokFinale()}];
 const TK8={list:null,byKey:{},dist:[],banner:null,fx:[],stats:{picked:0,ms:0,dc:0,stash:0,car:0,boat:0},near:1e9,nearK:null,tickT:0,stash:null};
 if(typeof NCAT!=='undefined')NCAT.tok={c:'#ffd23a',g:'\u25c6',n:'TOKEN'};
-function TKR(){let R=career.tok;if(!R||typeof R!=='object')R=career.tok={got:{},ms:{},dc:{},stashCd:0};R.got=R.got||{};R.ms=R.ms||{};R.dc=R.dc||{};if(typeof R.stashCd!=='number')R.stashCd=0;return R;}
+function TKR(){let R=career.tok;if(!R||typeof R!=='object')R=career.tok={got:{},ms:{},dc:{},stashCd:0};R.got=R.got||{};R.ms=R.ms||{};R.dc=R.dc||{};if(typeof R.stashCd!=='number')R.stashCd=0;if(R.v!==2&&TK8.list)tokMigrate(R);return R;}
+// v6n moved ~20 tokens into nooks: collected keys that no longer exist map onto the nearest uncollected token in the same district (count is kept)
+function tokMigrate(R){R.v=2;const names=DISTRICTS.map(d=>d.name);for(const key of Object.keys(R.got)){if(TK8.byKey[key])continue;delete R.got[key];const [tx,ty]=key.split(',').map(Number);if(!isFinite(tx)||!isFinite(ty))continue;
+  const x=tx*T+T/2,y=ty*T+T/2,dn=names[distAt5(x,y)];let b=null,bd=1e18;for(const pass of[0,1]){for(const k of TK8.list){if(R.got[k.key]||(pass===0&&k.dn!==dn))continue;const d=(k.x-x)**2+(k.y-y)**2;if(d<bd){bd=d;b=k;}}if(b)break;}if(b)R.got[b.key]=1;}TK8.stats.migrated=(TK8.stats.migrated||0)+1;}
 function tokPretty(n){return String(n).toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()).replace(/ Of /g,' of ');}
 // ---------------------------------------------------------------- placement (deterministic, built once from the map)
 function tokBuild(){if(TK8.list)return TK8.list;const rnd=mulberry32(5656),NN=N*N,INF=1e9,BR=i=>!!(BRIDGE5&&BRIDGE5[i]);
@@ -4648,7 +4795,7 @@ function tokBuild(){if(TK8.list)return TK8.list;const rnd=mulberry32(5656),NN=N*
   const brN=(x,y)=>{for(const [a,b] of[[1,0],[-1,0],[0,1],[0,-1]]){const xx=x+a,yy=y+b;if(xx>=0&&yy>=0&&xx<N&&yy<N&&BR(yy*N+xx))return true;}return false;};
   const sx=5*P-1,sy=4*P+6,bad=[];for(const o of pois){if(o.spot)bad.push(o.spot);if(o.door)bad.push(o.door);}if(typeof atms!=='undefined')for(const a of atms)bad.push(a);
   const names=DISTRICTS.map(d=>d.name),cand={};for(const k in TOK8_HINT)cand[k]=[];
-  for(let ty=2;ty<N-2;ty++)for(let tx=2;tx<N-2;tx++){const i=ty*N+tx,t=map[i];if(BR(i))continue;const x=tx*T+T/2,y=ty*T+T/2;
+  for(let ty=2;ty<N-2;ty++)for(let tx=2;tx<N-2;tx++){const i=ty*N+tx,t=map[i];if(BR(i)||(typeof NK8!=='undefined'&&NK8.cellSet.has(i)))continue;const x=tx*T+T/2,y=ty*T+T/2;
     if((tx-sx)**2+(ty-sy)**2<49)continue;let ks=[];
     if(t===SEA){if(brN(tx,ty))ks.push('causeway');else{if(dWalk[i]>=2&&dWalk[i]<=4)ks.push('swim');if(dLand[i]>=7)ks.push('boat');}}
     else if(LANDOK.has(t)){let ok=true;for(const b of bad)if(Math.abs(b.x-x)<56&&Math.abs(b.y-y)<56){ok=false;break;}
@@ -4664,13 +4811,15 @@ function tokBuild(){if(TK8.list)return TK8.list;const rnd=mulberry32(5656),NN=N*
       if(t===DOCK&&n4(tx,ty,v=>v===SEA)>=2&&n4(tx,ty,v=>v===DOCK)<=1)ks.push('dock');
       if(t===SAND&&dSea[i]>=1&&dSea[i]<=3)ks.push('beach');}
     if(!ks.length)continue;const dn=names[distAt5(x,y)];for(const k of ks)cand[k].push({i,tx,ty,x,y,dn,k});}
+  if(typeof NK8!=='undefined')for(const sp of NK8.spots){if(map[sp.ty*N+sp.tx]!==ALLEY)continue;cand[sp.k].push({i:sp.ty*N+sp.tx,tx:sp.tx,ty:sp.ty,x:sp.tx*T+T/2,y:sp.ty*T+T/2,dn:sp.dn,k:sp.k,roofed:sp.roofed});}
   const picked=[],far=(c,m)=>{for(const p of picked)if((p.tx-c.tx)**2+(p.ty-c.ty)**2<m*m)return false;return true;};
   const ORDER=['corner','alley','park','lot','shore','beach','dock','field','river','swim','boat','causeway'];
   for(const [dn,kinds] of TOK8_PLAN)for(const k of kinds){let c=null;
-    for(const m of[10,7,4]){let L=cand[k].filter(q=>q.dn===dn&&far(q,m));if(!L.length)for(const k2 of ORDER){L=cand[k2].filter(q=>q.dn===dn&&far(q,m));if(L.length)break;}
+    for(const m of[10,7,4]){let L=cand[k].filter(q=>q.dn===dn&&far(q,m)&&!picked.includes(q));if(!L.length&&TOK8_SECRET[k])for(const k2 of['nook','arcade','court']){L=cand[k2].filter(q=>q.dn===dn&&far(q,m)&&!picked.includes(q));if(L.length)break;}
+      if(!L.length)for(const k2 of ORDER){L=cand[k2].filter(q=>q.dn===dn&&far(q,m));if(L.length)break;}
       if(L.length){c=L[Math.floor(rnd()*L.length)];break;}}
     if(c)picked.push(c);}
-  TK8.list=picked.map((c,j)=>({id:j,key:c.tx+','+c.ty,x:c.x,y:c.y,tx:c.tx,ty:c.ty,dn:c.dn,kind:c.k,water:!!TOK8_WATER[c.k],ph:rnd()*6.28}));
+  TK8.list=picked.map((c,j)=>({id:j,key:c.tx+','+c.ty,x:c.x,y:c.y,tx:c.tx,ty:c.ty,dn:c.dn,kind:c.k,water:!!TOK8_WATER[c.k],secret:!!TOK8_SECRET[c.k],roofed:!!c.roofed,ph:rnd()*6.28}));
   TK8.cand={};for(const k in cand)TK8.cand[k]=cand[k].length;TK8.byKey={};for(const k of TK8.list)TK8.byKey[k.key]=k;
   TK8.dist=TOK8_PLAN.map(([dn])=>({dn,toks:TK8.list.filter(k=>k.dn===dn)})).filter(d=>d.toks.length);return TK8.list;}
 function tokHas(k){return !!TKR().got[k.key];}
@@ -4722,21 +4871,21 @@ function tokTick(dt){const L=tokBuild(),R=TKR(),p=player;if(TK8.banner){TK8.bann
   TK8.tickT-=dt;if(TK8.tickT<=0){TK8.tickT=1;try{tokCarTick();}catch(e){}}}
 update=(o=>function(dt){o(dt);try{tokTick(dt);}catch(e){if(!TK8.err){TK8.err=String(e);console.error(e);}}})(update);
 // ---------------------------------------------------------------- drawing
-function drawTok8(k){g.save();g.translate(k.x,k.y);g.scale(1.4,1.4);g.translate(-k.x,-k.y);drawTok8b(k);g.restore();}
+const TOK8_SCALE=.95;function drawTok8(k){g.save();g.translate(k.x,k.y);g.scale(TOK8_SCALE,TOK8_SCALE);g.translate(-k.x,-k.y);drawTok8b(k);g.restore();}
 function drawTok8b(k){const t=gtime,sp=Math.cos(t*3.2+k.ph),w=Math.max(.12,Math.abs(sp)),bob=Math.sin(t*2.6+k.ph)*1.8,x=k.x,y=k.y-5+bob,r=8.5;
   g.fillStyle='rgba(0,0,0,.33)';g.beginPath();g.ellipse(k.x+2,k.y+5,6.5,2.6,0,0,TAU);g.fill();
-  const gl=g.createRadialGradient(x,y,1,x,y,21);gl.addColorStop(0,'rgba(255,225,90,.55)');gl.addColorStop(1,'rgba(255,225,90,0)');g.fillStyle=gl;g.beginPath();g.arc(x,y,21,0,TAU);g.fill();
+  const gl=g.createRadialGradient(x,y,1,x,y,15);gl.addColorStop(0,'rgba(255,225,90,.5)');gl.addColorStop(1,'rgba(255,225,90,0)');g.fillStyle=gl;g.beginPath();g.arc(x,y,15,0,TAU);g.fill();
   g.fillStyle='#7a4c00';g.beginPath();g.ellipse(x+(sp<0?-1.4:1.4)*(1-w),y,r*w+1.3,r+.6,0,0,TAU);g.fill();
   g.fillStyle=sp>0?'#ffd23a':'#f2b21c';g.beginPath();g.ellipse(x,y,r*w,r,0,0,TAU);g.fill();g.strokeStyle='#4a2c00';g.lineWidth=1;g.stroke();
   if(w>.3){g.save();g.translate(x,y);g.scale(w,1);g.fillStyle='rgba(255,255,255,.35)';g.beginPath();g.arc(-2.5,-2.5,3.2,0,TAU);g.fill();g.fillStyle=sp>0?'#fff4b0':'#ffe680';drawStarPath(g,0,.5,5.2);g.fill();g.restore();}
   for(let i=0;i<3;i++){const a=t*1.7+i*2.09+k.ph,rr=13+2*Math.sin(t*4+i),sx=x+Math.cos(a)*rr,sy=y+Math.sin(a)*rr*.75,s=1.2+1.8*Math.max(0,Math.sin(t*5+i*1.7));
     g.fillStyle='#fff';g.fillRect(sx-s,sy-.5,2*s,1);g.fillRect(sx-.5,sy-s,1,2*s);}}
-function drawStash8(s,ready){g.save();g.translate(s.x,s.y);g.scale(1.4,1.4);g.translate(-s.x,-s.y);drawStash8b(s,ready);g.restore();}
+function drawStash8(s,ready){g.save();g.translate(s.x,s.y);g.scale(1.1,1.1);g.translate(-s.x,-s.y);drawStash8b(s,ready);g.restore();}
 function drawStash8b(s,ready){const x=s.x,y=s.y;g.fillStyle='rgba(0,0,0,.35)';g.fillRect(x-9,y-4,20,12);g.fillStyle=ready?'#6a4a20':'#3a3028';g.fillRect(x-10,y-8,20,14);
   g.fillStyle=ready?'#ffd23a':'#776';g.fillRect(x-10,y-8,20,2);g.fillRect(x-10,y+4,20,2);g.fillRect(x-1.5,y-8,3,14);
   if(ready){const a=.5+.5*Math.sin(gtime*4);g.strokeStyle='rgba(255,220,80,'+a+')';g.lineWidth=1.2;g.strokeRect(x-12,y-10,24,18);}}
-drawWorldOverlays=(o=>function(){o();if(interior)return;try{setWorld(0);const R=TKR();for(const k of tokBuild())if(!R.got[k.key]&&inView(k.x,k.y,30))drawTok8(k);
-  if(R.ms[10]){const s=tokStashPos();if(s&&inView(s.x,s.y,30))drawStash8(s,R.stashCd<=0);}
+// tokens + stash are drawn on the ground in v6n's drawBuildings (before the roofs); only the pickup fx stay up here
+drawWorldOverlays=(o=>function(){o();if(interior)return;try{setWorld(0);
   for(const f of TK8.fx){if(f.k==='burst'){const a=1-f.t;g.strokeStyle='rgba(255,220,80,'+a+')';g.lineWidth=2;g.beginPath();g.arc(f.x,f.y-5,6+f.t*34,0,TAU);g.stroke();
       for(let i=0;i<10;i++){const an=i*TAU/10,d=8+f.t*40;g.fillStyle='rgba(255,255,220,'+a+')';g.fillRect(f.x+Math.cos(an)*d-1.2,f.y-5+Math.sin(an)*d-1.2,2.4,2.4);}}
     else{const tg=player.inCar||player,cols=['#ff4060','#40ff90','#40c0ff','#ffd23a','#ff60ff'];for(let b=0;b<7;b++){const st=b*.85,lt=f.t-st;if(lt<0||lt>1.4)continue;
@@ -4765,7 +4914,7 @@ function tokView(){const v={title:'TOKENS',lines:[],items:[],foot:[],cards:true}
   if(!TOUCHUI)v.foot.push('Tokens spin and sparkle.','The minimap pulses gold','when one is close.');return v;}
 phoneView=(o=>function(){if(phone.app==='tokens')return tokView();return o();})(phoneView);
 startGame=(o=>function(){TK8.banner=null;TK8.fx=[];TK8.near=1e9;TK8.stash=null;for(const k in TK8.stats)TK8.stats[k]=0;return o.apply(this,arguments);})(startGame);
-window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get tok(){return{TK8,TOK8_MS,TOK8_PLAN,TOK8_TOTAL,TKR,tokBuild,tokTake,tokCount,tokDist,tokNextMs,tokView,tokStashPos,tokHome,tokCarTick};}}));
+window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get tok(){return{TK8,TOK8_MS,TOK8_PLAN,TOK8_TOTAL,TOK8_SCALE,TKR,tokBuild,tokTake,tokCount,tokDist,tokNextMs,tokView,tokStashPos,tokHome,tokCarTick};}}));
 drawCar=(o=>function(c){o(c);if(!c.tok8Gold||c.wreck)return;try{g.save();g.translate(c.x,c.y);g.rotate(c.a);g.fillStyle='#4a2c00';drawStarPath(g,0,0,c.W*.42);g.fill();g.fillStyle='#fff4b0';drawStarPath(g,0,0,c.W*.32);g.fill();g.restore();
   const t=gtime;for(let i=0;i<2;i++){const a=t*1.3+i*PI,rr=c.L*.55,sx=c.x+Math.cos(a)*rr,sy=c.y+Math.sin(a)*rr*.6,s=1.5+2*Math.max(0,Math.sin(t*4.5+i*2));g.fillStyle='#fff';g.fillRect(sx-s,sy-.6,2*s,1.2);g.fillRect(sx-.6,sy-s,1.2,2*s);}}catch(e){}})(drawCar);
 
