@@ -1089,7 +1089,7 @@ function drawWorldOverlays(){
   // red-light district tint + glows
   const dz=Math.hypot(camX-redZone.cx,camY-redZone.cy),f=clamp(1-(dz-redZone.r*.55)/(redZone.r*.45),0,1);
   if(f>0){g.setTransform(1,0,0,1,0,0);g.fillStyle='rgba(30,0,40,'+(.5*f)+')';g.fillRect(0,0,LW,LH);setWorld(0);g.globalCompositeOperation='lighter';
-    for(const s of hookSpots){if(!inView(s.x,s.y,80))continue;const gr=g.createRadialGradient(s.x,s.y,0,s.x,s.y,60);gr.addColorStop(0,'rgba(255,40,120,'+(.55*f)+')');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(s.x-60,s.y-60,120,120);}
+    for(const s of hookSpots){if(!inView(s.x,s.y,80))continue;const gx=s.lx!=null?s.lx:s.x,gy=s.ly!=null?s.ly:s.y,gr=g.createRadialGradient(gx,gy,0,gx,gy,60);gr.addColorStop(0,'rgba(255,40,120,'+(.55*f)+')');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(gx-60,gy-60,120,120);}
     g.globalCompositeOperation='source-over';}
   for(const o of pois){if(o.type!=='strip')continue;const bd=o.bd;if(bd.x1<vx0-80||bd.x0>vx1+80||bd.y1<vy0-80||bd.y0>vy1+80)continue;setWorld(bd.h);g.globalCompositeOperation='lighter';
     const cx=(bd.x0+bd.x1)/2,cy=(bd.y0+bd.y1)/2,pul=.6+.4*Math.sin(gtime*5),gr=g.createRadialGradient(cx,cy,10,cx,cy,110);gr.addColorStop(0,'rgba(255,60,190,'+(.32*pul)+')');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(cx-110,cy-110,220,220);
@@ -5438,8 +5438,9 @@ function dnLight(){DN.stats.frames++;const wins=DN.wins;DN.wins=[];if(!DN.on||st
   {const tg=player.inCar||player;if(player.active){const p=Pj(tg.x,tg.y,0);glow(p[0],p[1],70*sc,.55,null,0);}}
   // streetlights
   if(on>0){if(!DN.lamps)dnBuildLamps();const c0=Math.floor((vx0-vm)/T/12),c1=Math.floor((vx1+vm)/T/12),r0=Math.floor((vy0-vm)/T/12),r1=Math.floor((vy1+vm)/T/12);
-    for(let cy=r0;cy<=r1;cy++)for(let cx=c0;cx<=c1;cx++){const arr=DN.lamps.get(cx*1000+cy);if(!arr)continue;for(const [x,y] of arr){if(x<vx0-90||x>vx1+90||y<vy0-90||y>vy1+90)continue;
-      const p=Pj(x,y,0);glow(p[0],p[1],72*sc,.92*on,'#ffa040',.24*on);G2.push([0,p[0],p[1],5*sc,'#fff0c0',.85*on]);}}}
+    for(let cy=r0;cy<=r1;cy++)for(let cx=c0;cx<=c1;cx++){const arr=DN.lamps.get(cx*1000+cy);if(!arr)continue;for(const Lm of arr){if(Lm.down)continue;const x=Lm.hx,y=Lm.hy;if(x<vx0-90||x>vx1+90||y<vy0-90||y>vy1+90)continue;
+      // v6l: the pool of light is on the ground under the lamp head; the head itself glows up at lamp height
+      const p=Pj(x,y,0),hp=Pj(x,y,LAMP.H);glow(p[0],p[1],80*sc,.92*on,'#ffa040',.24*on);hi(1);G2.push([0,hp[0],hp[1],7*sc,'#fff0c0',.6*on]);hi(0);}}}
   // cars: headlights, tail lights, police bars, burning wrecks
   const fl=Math.floor(gtime*7)%2;
   for(const c of cars){if(c.x<vx0-200||c.x>vx1+200||c.y<vy0-200||c.y>vy1+200)continue;if(c._fly)continue;
@@ -5540,7 +5541,7 @@ function stMakeNoise(v){ST.noise=Math.max(ST.noise,clamp(v,0,1));}
 function stDistRect(x,y,x0,y0,x1,y1){const dx=Math.max(x0-x,0,x-x1),dy=Math.max(y0-y,0,y-y1);return Math.hypot(dx,dy);}
 function stLight(x,y){if(interior)return 1;const d=DN.dark;if(d<.03)return 1;let L=1-d*.78,lamp=0,add=0;const on=dnSmooth(.15,.45,d);
   if(on>0){if(!DN.lamps)dnBuildLamps();const bx=Math.floor(x/T/12),by=Math.floor(y/T/12);
-    for(let cy=by-1;cy<=by+1;cy++)for(let cx=bx-1;cx<=bx+1;cx++){const a=DN.lamps.get(cx*1000+cy);if(!a)continue;for(const [lx,ly] of a){const r=Math.hypot(lx-x,ly-y);if(r<80)lamp=Math.max(lamp,.68*on*(1-r/80));}}}
+    for(let cy=by-1;cy<=by+1;cy++)for(let cx=bx-1;cx<=bx+1;cx++){const a=DN.lamps.get(cx*1000+cy);if(!a)continue;for(const Lm of a){if(Lm.down)continue;const lx=Lm.hx,ly=Lm.hy,r=Math.hypot(lx-x,ly-y);if(r<80)lamp=Math.max(lamp,.68*on*(1-r/80));}}}
   add+=lamp;
   for(const c of cars){if(c.wreck||c._fly)continue;const r0=Math.hypot(c.x-x,c.y-y);if(r0>230)continue;
     if(on>0&&(c.driver||player.inCar===c)&&player.inCar!==c){const fx=c.x+Math.cos(c.a)*c.L/2,fy=c.y+Math.sin(c.a)*c.L/2,r=Math.hypot(x-fx,y-fy);
@@ -5919,5 +5920,88 @@ function w9Tick(dt,h0){if(state!=='play')return;const S=W9.st,tg=player.inCar||p
 manage=(o=>function(){if(stars===1&&W9.st.phase==='due'){const v=MAXCOPS[1];MAXCOPS[1]=0;try{return o();}finally{MAXCOPS[1]=v;}}return o();})(manage);
 update=(o=>function(dt){const h0=heat;try{if(state==='play')w9Crew();}catch(e){}o(dt);try{w9Tick(dt,h0);}catch(e){console.error(e);}})(update);
 __game.w9=W9;
+
+// v6l: real street lamps.  Every streetlight glow now comes from a visible lamp post: a pole on the sidewalk by the kerb, an arm
+// reaching over the road and a head at the arm end.  The light pool sits on the ground under the head and the head itself
+// glows at night.  Poles are thin solid circles for people (r 2) and break-away for cars (a fast car knocks one over; it is put
+// back after a while when nobody is looking).  The pink red-light-district glows get pink lamps of their own.
+const LAMP={list:[],B:new Map(),at:new Int32Array(N*N),H:.085,ARM:12,PR:2,skip:false,down:[],stats:{lamps:0,pink:0,skipped:0,knocked:0,restored:0,pushes:0},tick:0,why:{}};
+LAMP.at.fill(-1);
+(function lampBuild(){try{const nb=[[0,-1],[1,0],[0,1],[-1,0]],okT=new Set([SIDE,BLD,ROAD,GRASS,WATER]);
+  const near=[];// points lamps must keep clear of: doors, door spots, signal/stop poles, ATMs, hydrants, trees, hook spots
+  for(const o of pois){if(o.spot)near.push([o.spot.x,o.spot.y,40]);if(o.door)near.push([o.door.x,o.door.y,40]);}
+  if(typeof NODES!=='undefined')for(const nd of NODES){if(nd.ctrl==='none')continue;if(!nd.ap&&typeof approaches==='function')nd.ap=approaches(nd);for(const a of nd.ap||[])near.push([a[1],a[2],36]);}
+  for(const a of atms)near.push([a.wx,a.wy,22]);if(typeof W4!=='undefined')for(const h of W4.hyd)near.push([h.x,h.y,22]);for(const t of trees)near.push([t.x,t.y,(t.r||6)+8]);for(const s of hookSpots)near.push([s.x,s.y,30]);
+  const G=new Map();for(const q of near){const k=((q[0]/T/4)|0)*10000+((q[1]/T/4)|0);if(!G.has(k))G.set(k,[]);G.get(k).push(q);}
+  const clear=(x,y)=>{const cx=(x/T/4)|0,cy=(y/T/4)|0;for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){const a=G.get((cx+i)*10000+cy+j);if(!a)continue;for(const q of a)if(Math.hypot(q[0]-x,q[1]-y)<q[2])return false;}return true;};
+  const xwT=new Set();if(typeof PX!=='undefined')for(const w of PX.xw)for(const e of[w.a,w.b]){const tx=Math.floor(e.x/T),ty=Math.floor(e.y/T);for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++)xwT.add((ty+j)*N+tx+i);}
+  const garNear=(x,y)=>typeof GAR!=='undefined'&&GAR.list.some(Gg=>x>Gg.x0-50&&x<Gg.x1+50&&y>Gg.y0-50&&y<Gg.y1+50);
+  const add=L=>{L.i=LAMP.list.length;LAMP.list.push(L);const k=((L.x/T/12)|0)*1000+((L.y/T/12)|0);if(!LAMP.B.has(k))LAMP.B.set(k,[]);LAMP.B.get(k).push(L);};
+  const used=new Set(),behindOK=new Set([SIDE,BLD,GRASS,WATER,9]);
+  // a kerb tile works when it is sidewalk with road on the kerb side, its two neighbours along the kerb are sidewalk too, nothing
+  // but sidewalk / building / grass is behind any of the three (so no driveway, lot, alley or nook mouth), and it is not a crossing,
+  // a cut corner or close to a door, a signal pole, an ATM, a hydrant or a tree.  If the regular spot fails, try 1-2 tiles along.
+  const fits=(tx,ty,dx,dy)=>{const R=LAMP.why,ax=dy?1:0,ay=dx?1:0;if(tx<1||ty<1||tx>=N-1||ty>=N-1)return false;if(used.has(ty*N+tx))return false;
+    for(let s=-1;s<=1;s++){const x=tx+ax*s,y=ty+ay*s,k=y*N+x;if(map[k]!==SIDE||map[(y+dy)*N+x+dx]!==ROAD){R.kerb=(R.kerb|0)+1;return false;}
+      if(!behindOK.has(map[(y-dy)*N+x-dx])){R.behind=(R.behind|0)+1;return false;}
+      if(xwT.has(k)){R.xw=(R.xw|0)+1;return false;}if(typeof CUT8!=='undefined'&&CUT8.at[k]>=0){R.cut=(R.cut|0)+1;return false;}if(typeof NK8!=='undefined'&&NK8.cellSet.has(k)){R.nk=(R.nk|0)+1;return false;}}
+    const x=(tx+.5+dx*.36)*T,y=(ty+.5+dy*.36)*T;if(!clear(x,y)){R.near=(R.near|0)+1;return false;}if(garNear(x,y)){R.gar=(R.gar|0)+1;return false;}return true;};
+  for(let ty=1;ty<N-1;ty++)for(let tx=1;tx<N-1;tx++){if(map[ty*N+tx]!==SIDE)continue;
+    for(const [dx,dy] of nb){if(map[(ty+dy)*N+tx+dx]!==ROAD)continue;const along=dx?ty:tx;if(((along+(dx?tx:ty)*3)%6)!==0)continue;
+      const ax=dy?1:0,ay=dx?1:0;let got=null;for(const s of[0,1,-1,2,-2,3,-3]){const X=tx+ax*s,Y=ty+ay*s;if(fits(X,Y,dx,dy)){got=[X,Y];break;}}
+      if(!got){LAMP.stats.skipped++;break;}const [X,Y]=got;used.add(Y*N+X);for(const s of[-1,1])used.add((Y+ay*s)*N+X+ax*s);
+      const x=(X+.5+dx*.36)*T,y=(Y+.5+dy*.36)*T;add({x,y,hx:x+dx*LAMP.ARM,hy:y+dy*LAMP.ARM,dx,dy,tx:X,ty:Y,down:0,kind:'st'});LAMP.at[Y*N+X]=LAMP.list.length-1;LAMP.stats.lamps++;break;}}
+  // pink lamps over the red-light district hook spots (their pink pool of light already sits on the spot)
+  for(const s of hookSpots){let rd=[0,-1];for(const [dx,dy] of nb){const tx=Math.floor(s.x/T)+dx,ty=Math.floor(s.y/T)+dy;if(map[ty*N+tx]===ROAD){rd=[dx,dy];break;}}
+    const [dx,dy]=rd,ax=dy?1:0,ay=dx?1:0,x=s.x+ax*16+dx*9,y=s.y+ay*16+dy*9;const L={x,y,hx:x+dx*9,hy:y+dy*9,dx,dy,down:0,kind:'pink',deco:true};add(L);s.lx=L.hx;s.ly=L.hy;LAMP.stats.pink++;}
+}catch(e){console.error('v6l lamps',e);}})();
+// the night pass reads its lamp buckets from here (v6d glow loop uses the head position)
+dnBuildLamps=function(){const B=new Map();for(const [k,a] of LAMP.B)B.set(k,a.filter(L=>L.kind==='st'));DN.lamps=B;DN.stats.lamps=LAMP.stats.lamps;};
+function lampEach(m,f){const c0=Math.floor((vx0-m)/T/12),c1=Math.floor((vx1+m)/T/12),r0=Math.floor((vy0-m)/T/12),r1=Math.floor((vy1+m)/T/12);
+  for(let cy=r0;cy<=r1;cy++)for(let cx=c0;cx<=c1;cx++){const a=LAMP.B.get(cx*1000+cy);if(!a)continue;for(const L of a)if(L.x>vx0-m&&L.x<vx1+m&&L.y>vy0-m&&L.y<vy1+m)f(L);}}
+const lampLit=()=>typeof DN!=='undefined'&&DN.on&&DN.dark>.25;
+// ---- ground pass: shadows by day (fade at night), knocked-over poles lying on the sidewalk
+drawPOIGround=(o=>function(){o();if(interior)return;const o2=LAMP.H*110,sa=.28*(typeof DN!=='undefined'?1-clamp(DN.dark,0,1)*.75:1);g.lineCap='round';
+  lampEach(40,L=>{if(L.down){g.strokeStyle='rgba(0,0,0,.3)';g.lineWidth=3.4;const ex=L.x+Math.cos(L.fa)*30,ey=L.y+Math.sin(L.fa)*30;g.beginPath();g.moveTo(L.x+1,L.y+1.5);g.lineTo(ex+1,ey+1.5);g.stroke();
+      g.strokeStyle='#5a5a62';g.lineWidth=2.6;g.beginPath();g.moveTo(L.x,L.y);g.lineTo(ex,ey);g.stroke();g.fillStyle='#3a3a40';g.fillRect(ex-3,ey-3,6,6);g.fillStyle='#8a8478';g.fillRect(ex-1.5,ey-1.5,3,3);
+      g.fillStyle='#44444a';g.beginPath();g.arc(L.x,L.y,2.6,0,TAU);g.fill();return;}
+    g.strokeStyle=g.fillStyle=`rgba(0,0,0,${sa.toFixed(3)})`;g.lineWidth=2.6;g.beginPath();g.moveTo(L.x,L.y);g.lineTo(L.x+o2,L.y+o2);g.stroke();
+    g.lineWidth=1.8;g.beginPath();g.moveTo(L.x+o2,L.y+o2);g.lineTo(L.hx+o2,L.hy+o2);g.stroke();g.fillRect(L.hx+o2-3.5,L.hy+o2-3.5,7,7);});
+  g.lineCap='butt';})(drawPOIGround);
+// ---- the lamp itself, projected like the traffic lights (pole box, arm, head box), drawn with the other road props
+drawRoadProps=(o=>function(){o();if(interior)return;const lit=lampLit(),H=LAMP.H,pr=1.4;
+  const vis=[];lampEach(30,L=>{if(!L.down)vis.push(L);});if(!vis.length)return;
+  vis.sort((a,b)=>((b.x-camX)**2+(b.y-camY)**2)-((a.x-camX)**2+(a.y-camY)**2));
+  for(const L of vis){const pk=L.kind==='pink';
+    box3(L.x-pr,L.y-pr,L.x+pr,L.y+pr,0,H,'#6c6c74','#2c2c30','#56565e','#3a3a40','#7c7c84');
+    const a=Pj(L.x,L.y,H-.002),b=Pj(L.hx,L.hy,H-.002);g.setTransform(1,0,0,1,0,0);g.strokeStyle='#4a4a52';g.lineWidth=Math.max(1.4,1.9*S);g.lineCap='round';g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(b[0],b[1]);g.stroke();g.lineCap='butt';
+    const hw=4.2,hd=2.6,ax=Math.abs(L.dx)>0,x0=L.hx-(ax?hw:hd),x1=L.hx+(ax?hw:hd),y0=L.hy-(ax?hd:hw),y1=L.hy+(ax?hd:hw);
+    const on=lit||pk,top=on?(pk?'#ff8ad8':'#ffeeb0'):'#9a9aa2';box3(x0,y0,x1,y1,H-.012,H+.002,'#5a5a62','#2a2a2e','#4a4a52','#36363c',top);
+    if(on){const c=Pj(L.hx,L.hy,H+.002);g.setTransform(1,0,0,1,0,0);g.fillStyle=pk?'#ffd0f0':'#fffbe8';g.beginPath();g.arc(c[0],c[1],Math.max(1.2,1.5*S),0,TAU);g.fill();}}
+  g.setTransform(1,0,0,1,0,0);})(drawRoadProps);
+// ---- collision: people bump into poles (thin), cars knock them over when fast, otherwise bounce off
+resolveCircleTiles=(o=>function(p,r){const res=o(p,r);if(LAMP.skip||(p.lvl|0)!==0)return res;let nx=res?res.x:0,ny=res?res.y:0,hit=!!res;
+  const tx0=Math.floor((p.x-r-3)/T),tx1=Math.floor((p.x+r+3)/T),ty0=Math.floor((p.y-r-3)/T),ty1=Math.floor((p.y+r+3)/T);
+  for(let ty=ty0;ty<=ty1;ty++)for(let tx=tx0;tx<=tx1;tx++){if(tx<0||ty<0||tx>=N||ty>=N)continue;const i=LAMP.at[ty*N+tx];if(i<0)continue;const L=LAMP.list[i];if(L.down)continue;
+    const dx=p.x-L.x,dy=p.y-L.y,d=Math.hypot(dx,dy),m=r+LAMP.PR;if(d>=m)continue;let ux=d>.01?dx/d:-L.dx,uy=d>.01?dy/d:-L.dy;ux-=L.dx*.35;uy-=L.dy*.35;const ul=Math.hypot(ux,uy)||1;ux/=ul;uy/=ul;// lean the push toward the sidewalk so a head-on walker slides round the pole
+    p.x=L.x+ux*m;p.y=L.y+uy*m;nx+=ux;ny+=uy;hit=true;LAMP.stats.pushes++;}
+  return hit?{x:nx,y:ny}:null;})(resolveCircleTiles);
+carTiles=(o=>function(c){LAMP.skip=true;try{o(c);}finally{LAMP.skip=false;}if((c.lvl|0)!==0||c.boat||c._fly)return;
+  const ctx=Math.floor(c.x/T),cty=Math.floor(c.y/T);const fx=Math.cos(c.a),fy=Math.sin(c.a),off=c.L/2-c.W/2,r=c.W/2;
+  for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){const tx=ctx+i,ty=cty+j;if(tx<0||ty<0||tx>=N||ty>=N)continue;const k=LAMP.at[ty*N+tx];if(k<0)continue;const L=LAMP.list[k];if(L.down)continue;
+    for(const s of[off,-off,0]){const px=c.x+fx*s,py=c.y+fy*s,dx=px-L.x,dy=py-L.y,d=Math.hypot(dx,dy),m=r+LAMP.PR;if(d>=m)continue;
+      const sp=Math.hypot(c.vx,c.vy);
+      if(sp>55){L.down=gtime||1;L.fa=Math.atan2(c.vy,c.vx)+(Math.random()-.5)*.6;LAMP.down.push(L);LAMP.stats.knocked++;c.vx*=.82;c.vy*=.82;
+        try{sfx('crash',L.x,L.y);}catch(e){}for(let q=0;q<6;q++)addP(L.x,L.y,rr(-90,90),rr(-90,90),.3,2,'#ffe080');break;}
+      const ux=d>.01?dx/d:-fx,uy=d>.01?dy/d:-fy;c.x+=ux*(m-d);c.y+=uy*(m-d);const vn=c.vx*ux+c.vy*uy;if(vn<0){c.vx-=1.4*vn*ux;c.vy-=1.4*vn*uy;}break;}}
+  if(LAMP.down.length&&(++LAMP.tick%120)===0){const t=gtime||0;LAMP.down=LAMP.down.filter(L=>{if(t-L.down>90&&(L.x<vx0-100||L.x>vx1+100||L.y<vy0-100||L.y>vy1+100)){L.down=0;LAMP.stats.restored++;return false;}return true;});}})(carTiles);
+// garage roof lights get real fixtures (short posts with heads at the 5 points the night pass lights)
+drawBuildings=(o=>function(){o();if(interior||typeof GAR==='undefined')return;const lit=lampLit();
+  for(const Gg of GAR.list){if(Gg.x1<vx0-40||Gg.x0>vx1+40||Gg.y1<vy0-40||Gg.y0>vy1+40)continue;const h0=Gg.H[2],hR=h0+.04;
+    for(const [u,v] of [[.12,.12],[.88,.12],[.12,.88],[.88,.88],[.5,.5]]){const x=Gg.x0+(Gg.x1-Gg.x0)*u,y=Gg.y0+(Gg.y1-Gg.y0)*v;
+      box3(x-1.3,y-1.3,x+1.3,y+1.3,h0,hR,'#6c6c74','#2c2c30','#56565e','#3a3a40','#7c7c84');
+      box3(x-3.4,y-3.4,x+3.4,y+3.4,hR-.008,hR+.002,'#5a5a62','#2a2a2e','#4a4a52','#36363c',lit?'#fff2c0':'#9a9aa2');}}
+  g.setTransform(1,0,0,1,0,0);})(drawBuildings);
+__game.lamp=LAMP;
 
 </script></body></html>
