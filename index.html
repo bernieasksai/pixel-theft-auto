@@ -6004,4 +6004,31 @@ drawBuildings=(o=>function(){o();if(interior||typeof GAR==='undefined')return;co
   g.setTransform(1,0,0,1,0,0);})(drawBuildings);
 __game.lamp=LAMP;
 
+// v6y: a clean slate after WASTED / BUSTED.  Damage credit ("the player did this") used to stick to a car for good: a police car
+// the player rammed or shot during the chase kept byPlayer=true, so when it burned out and blew up after the respawn, the game
+// paid "COP CAR TOASTED" heat (120 = 3 stars) to the new life.  Pending 911 calls, alarm calls and suspicion could also carry over.
+// Now every attribution is cleared when the player goes down, again on respawn, and the chase's burning / wrecked police units
+// out of sight are cleared away.  Anything the player sets off in the new life (including chain explosions) still counts.
+const RS8={life:1,stats:{clears:0,cars:0,calls:0,pq:0,alarms:0,bullets:0,despawn:0,peds:0},log:[]};
+function rsClear(why){RS8.stats.clears++;const S=RS8.stats;
+  for(const c of cars){if(c.byPlayer){c.byPlayer=false;S.cars++;}if(c.alarmOn&&c.alarmOn.cause==='player'){c.alarmOn.cause='npc';S.alarms++;}}
+  // bullets the player fired that are still in the air
+  if(typeof bullets!=='undefined'){const n=bullets.length;bullets=bullets.filter(b=>b.owner!=='player');S.bullets+=n-bullets.length;}
+  // witnesses on the phone, deferred 911 calls, the dispatcher, the last-crime marker
+  try{if(typeof ST!=='undefined'){S.calls+=ST.calls.length;ST.calls=[];ST.task=null;ST.noise=0;ST.pop=null;}}catch(e){}
+  try{if(typeof AL!=='undefined'){S.pq+=AL.pq.length;AL.pq=[];AL.gate=null;AL.defer=false;}}catch(e){}
+  try{if(typeof W9!=='undefined'){W9.st.phase='none';W9.st.unit=null;W9.st.t=0;}}catch(e){}
+  try{if(typeof EV!=='undefined'){EV.lastCrime=null;EV.supHeat=0;for(const j of EV.jobs)if(j.playerHeat){j.playerHeat=0;S.jobs=(S.jobs|0)+1;}}}catch(e){}
+  for(const p of peds){if(p.calling>0&&!p.dead){p.calling=0;if(p.state==='call')p.state='flee';S.peds++;}if(p.hostile&&p.cop)p.hostile=false;}
+  RS8.log.push([why,gtime]);if(RS8.log.length>20)RS8.log.shift();}
+wasted=(o=>function(){const was=state;const r=o.apply(this,arguments);if(was==='play'&&state!=='play'){RS8.life++;rsClear('wasted');}return r;})(wasted);
+busted=(o=>function(){const was=state;const r=o.apply(this,arguments);if(was==='play'&&state!=='play'){RS8.life++;rsClear('busted');}return r;})(busted);
+respawn=(o=>function(){const r=o.apply(this,arguments);if(state!=='play')return r;rsClear('respawn');heat=0;stars=0;
+  // burning or wrecked police units left over from the chase: clear the ones the player can't see; the rest just can't credit anyone
+  const tg=player,hw=(LW/2)/S+120,hh=(LH/2)/S+120;
+  cars=cars.filter(c=>{if(c===player.inCar)return true;const cop=c.type==='police'||c.deployed;const hurt=c.fire>0||c.wreck||(c.hp!=null&&c.hp<20);
+    if(!cop||!hurt)return true;if(Math.abs(c.x-tg.x)<hw&&Math.abs(c.y-tg.y)<hh)return true;RS8.stats.despawn++;return false;});
+  return r;})(respawn);
+__game.rs=RS8;
+
 </script></body></html>
