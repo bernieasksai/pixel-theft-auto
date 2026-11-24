@@ -1069,6 +1069,7 @@ function poiCol(o){return POI_DEF[o.type].col;}
 function drawPOIGround(){drawCamCones();for(const o of pois){const s=o.spot;if(!inView(s.x,s.y,60))continue;const nx=o.n[0],ny=o.n[1],px=-ny,py=nx;
     if(o.type==='garage'||o.type==='chop'||(o.type==='apt'&&o.owned)){const cx=s.x+nx*8,cy=s.y+ny*8;g.save();g.translate(cx,cy);g.fillStyle='rgba(0,0,0,.25)';g.fillRect(-20,-20,40,40);
       const sc=o.type==='chop'?'#e04040':'#f0c020';g.beginPath();g.rect(-19,-19,38,38);g.clip();g.strokeStyle=sc;g.globalAlpha=.4;g.lineWidth=3;g.beginPath();for(let i=-40;i<=40;i+=10){g.moveTo(i-20,-20);g.lineTo(i+20,20);}g.stroke();g.globalAlpha=1;g.lineWidth=2;g.strokeRect(-18,-18,36,36);g.restore();}
+    else if(o.corner8){g.save();g.translate(s.x-nx*12,s.y-ny*12);g.rotate(Math.atan2(ny,nx));g.fillStyle=shade(poiCol(o),.55);g.fillRect(-4,-9,8,18);g.restore();}
     else{g.fillStyle=shade(poiCol(o),.55);g.fillRect(s.x-nx*12-Math.abs(px)*8-Math.abs(nx)*4,s.y-ny*12-Math.abs(py)*8-Math.abs(ny)*4,Math.abs(px)*16+Math.abs(nx)*8,Math.abs(py)*16+Math.abs(ny)*8);}
     if(o.type==='gas'&&!o.fc)for(const k of[-1,1]){const x=s.x+px*k*26+nx*2,y=s.y+py*k*26+ny*2;g.fillStyle='rgba(0,0,0,.35)';g.fillRect(x-4,y-4,10,10);g.fillStyle='#d02020';g.fillRect(x-5,y-5,9,9);g.fillStyle='#fff';g.fillRect(x-3,y-3,5,3);g.fillStyle='#222';g.fillRect(x-1,y+1,2,3);}}
   for(const a of atms){if(!inView(a.wx,a.wy,20))continue;g.fillStyle='rgba(0,0,0,.35)';g.fillRect(a.wx-4,a.wy-4,10,10);g.fillStyle='#2a6a3a';g.fillRect(a.wx-5,a.wy-5,10,10);g.fillStyle='#8f8';g.fillRect(a.wx-3,a.wy-3,6,3);g.fillStyle='#ddd';g.fillRect(a.wx-3,a.wy+1,6,2);}}
@@ -1078,7 +1079,7 @@ function drawDoorOnWall(p0,p1,q0,q1,bd,len,side){const o=bd.poi;const u=side<2?(
   const big=o.type==='garage'||o.type==='chop',w=big?2.2:1;quad(u-du*w-.01,u+du*w+.01,0,th*1.25,shade(poiCol(o),.7));quad(u-du*w,u+du*w,0,th,big?'#4a4a4a':'#141414');
   if(big){g.strokeStyle='rgba(0,0,0,.4)';g.lineWidth=1;for(let i=1;i<5;i++){const a=pt(u-du*w,th*i/5),b=pt(u+du*w,th*i/5);g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(b[0],b[1]);g.stroke();}}
   else quad(u-du*.6,u+du*.6,th*.15,th*.85,o.type==='strip'?'#ff3cbe':'#e8d890');}
-function drawRoofSign(bd){if(bd.poi.type==='house')return;const o=bd.poi,col=poiCol(o),w=Math.min(bd.x1-bd.x0-14,110),h=24,cx=(bd.x0+bd.x1)/2,cy=(bd.y0+bd.y1)/2;
+function drawRoofSign(bd){if(bd.poi.type==='house')return;const o=bd.poi,col=poiCol(o);g.font='bold 11px '+FONT;const w=Math.max(Math.min(bd.x1-bd.x0-14,110),Math.min(124,g.measureText(o.name).width+14,(bd.x1-bd.x0)+40)),h=24,cx=(bd.x0+bd.x1)/2,cy=(bd.y0+bd.y1)/2;
   const neon=o.type==='strip',fl=neon?(Math.floor(gtime*3)%2?1:.55):1;
   g.fillStyle='rgba(0,0,0,.35)';g.fillRect(cx-w/2+3,cy-h/2+3,w,h);g.fillStyle='#141418';g.fillRect(cx-w/2,cy-h/2,w,h);
   g.strokeStyle=neon?(Math.floor(gtime*4)%2?'#ff3cbe':'#3cf0ff'):col;g.lineWidth=2;g.globalAlpha=fl;g.strokeRect(cx-w/2+1,cy-h/2+1,w-2,h-2);g.globalAlpha=1;
@@ -3891,6 +3892,8 @@ drawWorldOverlays=(o=>function(){o();
   g.globalCompositeOperation='lighter';
   for(const b of buildings){if(!b.neon5&&!(b.poi&&POI5[b.poi.type]))continue;if(b.x1<vx0-40||b.x0>vx1+40||b.y1<vy0-40||b.y0>vy1+40)continue;setWorld(b.h);
     const col=b.neon5||poiCol(b.poi),fl=(hash2(b.seed&255,Math.floor(gtime*2))>.06)?1:.3,pul=.75+.25*Math.sin(gtime*3+b.seed);
+    if(b.cut&&typeof cutPoly==='function'){const P=cutPoly(b),cx=(b.x0+b.x1)/2,cy=(b.y0+b.y1)/2,pa=new Path2D();P.forEach((q,i)=>{const x=q[0]+Math.sign(cx-q[0])*4,y=q[1]+Math.sign(cy-q[1])*4;i?pa.lineTo(x,y):pa.moveTo(x,y);});pa.closePath();
+      g.globalAlpha=.28*pul*fl;g.strokeStyle=col;g.lineWidth=5;g.stroke(pa);g.globalAlpha=.9*fl;g.lineWidth=1.4;g.stroke(pa);continue;}
     g.globalAlpha=.28*pul*fl;g.strokeStyle=col;g.lineWidth=5;g.strokeRect(b.x0+4,b.y0+4,b.x1-b.x0-8,b.y1-b.y0-8);g.globalAlpha=.9*fl;g.lineWidth=1.4;g.strokeRect(b.x0+4,b.y0+4,b.x1-b.x0-8,b.y1-b.y0-8);}
   g.globalAlpha=1;g.globalCompositeOperation='source-over';
   // courthouse: columns + pediment on the entrance side
@@ -4041,6 +4044,59 @@ carPhysics=(o=>function(c,dt){o(c,dt);if(c.boat||c.sink>0)return;const t=tileW(c
   const sp=Math.hypot(c.vx,c.vy),cap=c.max*.4;let k=Math.exp(-1.4*dt);if(sp>cap)k*=Math.exp(-2.6*dt*(sp-cap)/Math.max(1,sp));c.vx*=k;c.vy*=k;
   if(sp>40&&R()<dt*30)addP(c.x-Math.cos(c.a)*c.L/2+rr(-4,4),c.y-Math.sin(c.a)*c.L/2+rr(-4,4),-c.vx*.15+rr(-25,25),-c.vy*.15+rr(-25,25),rr(.3,.6),3,pick(['#d8bc84','#e6cc98','#c8a870']),false);})(carPhysics);
 window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get beach(){return{SANDV5,WET5,M5,distAt5,SAND,SEA};}}));
+
+// v6b: realistic shop footprints.  A storefront (burger joint, pizza, bodega...) used to take a whole building, often a whole 8x8 block.
+// Now the shop gets a storefront-sized box on the street side and the rest of its block becomes other buildings (taller offices /
+// apartments, sometimes a little alley).  Bodegas are a low side shop on the ground floor of a bigger building.
+// Pure data pass at load time: buildings stay axis-aligned rectangles on the tile grid, so collision / rendering cost is unchanged.
+const BL8={small:['burger','pizza','taco','diner','cuban','seafood','video','bodega','laundry','pharm','gun','clothing','grocery','pawn'],
+  annex:['bodega'],stats:{split:0,pieces:0,alleys:0,annex:0,skipped:0},log:[],shopPal:['#c8b8a0','#d0c0a8','#b8a890','#c0b0a0','#a8b8c0','#c8c0b0']};
+function blMini(tx,ty,rgb){try{const m=mini.getContext('2d');m.fillStyle='rgb('+rgb.join(',')+')';m.fillRect(tx,ty,1,1);}catch(e){}}
+function blSetTile(tx,ty,t){map[ty*N+tx]=t;const C={0:[150,150,150],1:[95,95,95],2:[44,48,58],3:[45,100,40],5:[80,80,84],6:[70,68,66]};if(C[t])blMini(tx,ty,C[t]);}
+function blMakeB(tx,ty,w,h,o){const rnd=o.rnd,D=DISTRICTS[districtAt((tx+w/2)*T,(ty+h/2)*T)]||DISTRICTS[0],wall=o.wall||D.walls[Math.floor(rnd()*D.walls.length)];
+  const ht=o.h!=null?o.h:(D.hmin+rnd()*(D.hmax-D.hmin));
+  const bd={x0:tx*T,y0:ty*T,x1:(tx+w)*T,y1:(ty+h)*T,h:ht,floors:Math.max(1,Math.round(ht*10)),seed:(rnd()*1e6)|0,
+    wN:shade(wall,.95),wS:shade(wall,.6),wE:shade(wall,.72),wW:shade(wall,.84),roof:shade(wall,1.2),rim:shade(wall,.88),det:[],heli:false,bl8:o.kind||'piece'};
+  if(w>=2&&h>=2&&!o.noDet){const nd=1+Math.floor(rnd()*3);for(let i=0;i<nd;i++){const dw=10+rnd()*Math.min(20,w*T-36),dh=10+rnd()*Math.min(20,h*T-36);if(w*T-16-dw<4||h*T-16-dh<4)continue;
+    bd.det.push({x:bd.x0+8+rnd()*(w*T-16-dw),y:bd.y0+8+rnd()*(h*T-16-dh),w:dw,h:dh,c:['#9a9a9a','#7a7a80','#b0b0a8','#606068','#8a8070'][Math.floor(rnd()*5)]});}}
+  return bd;}
+// split one shop building; returns true if split
+function blSplit(o,rnd){const bd=o.bd;if(!bd||bd.nk||bd.garage||bd.rural||bd.ship5||bd.bl8)return false;
+  const X0=bd.x0/T,Y0=bd.y0/T,X1=bd.x1/T,Y1=bd.y1/T;if(![X0,Y0,X1,Y1].every(Number.isInteger))return false;
+  const s=o.side,vert=s===2||s===3,F=vert?Y1-Y0:X1-X0,Dp=vert?X1-X0:Y1-Y0,annex=BL8.annex.includes(o.type);
+  if(!annex&&F<=4&&Dp<=4)return false;if(annex&&F<=3&&Dp<=2)return false;
+  // facade coords (f along the street, d into the block) -> tile rect
+  const R=(f0,f1,d0,d1)=>{let x0,x1,y0,y1;if(s===0){x0=X0+f0;x1=X0+f1;y0=Y0+d0;y1=Y0+d1;}else if(s===1){x0=X0+f0;x1=X0+f1;y0=Y1-d1;y1=Y1-d0;}
+    else if(s===2){x0=X0+d0;x1=X0+d1;y0=Y0+f0;y1=Y0+f1;}else{x0=X1-d1;x1=X1-d0;y0=Y0+f0;y1=Y0+f1;}return{x:x0,y:y0,w:x1-x0,h:y1-y0};};
+  let fw=annex?(F>=6?3:2):(F>=7?(rnd()<.5?3:4):Math.min(F,3)),dd=annex?2:3;if(fw>F)fw=F;
+  if(Dp-dd===1||dd>Dp)dd=Math.min(Dp,annex?3:4);if(Dp-dd===1)dd=Dp;
+  // where along the street: end of the facade at a block corner is preferred (room for a corner entrance), else near the old door
+  const endA=[0,F-fw],cornerAt=f=>{const r=R(f,f+1,0,1);const ox=s===2?-1:s===3?1:0,oy=s===0?-1:s===1?1:0;const sideF=vert?[[0,-1],[0,1]]:[[-1,0],[1,0]];
+      const k=f===0?0:1,[ax,ay]=sideF[k];return tileAt(r.x+ax,r.y+ay)===SIDE&&tileAt(r.x+ox,r.y+oy)===SIDE&&tileAt(r.x+ax+ox,r.y+ay+oy)===SIDE;};
+  const okA=a=>{const L=a,Rr=F-a-fw;const alL=!annex&&L>=3,alR=!annex&&Rr>=3;const l2=alL?L-1:L,r2=alR?Rr-1:Rr;return (l2===0||l2>=2)&&(r2===0||r2>=2);};
+  let opts=[];for(let a=0;a<=F-fw;a++)if(okA(a))opts.push(a);if(!opts.length){fw=F;opts=[0];}
+  let a;const corners=opts.filter(x=>(x===0&&cornerAt(0))||(x===F-fw&&cornerAt(F-1)));
+  if(!annex&&corners.length&&rnd()<.65)a=corners[Math.floor(rnd()*corners.length)];
+  else{const mid=Math.round(F/2-fw/2);opts.sort((p,q)=>Math.abs(p-mid)-Math.abs(q-mid));a=opts[Math.min(opts.length-1,Math.floor(rnd()*Math.min(2,opts.length)))];}
+  const pieces=[],L=a,Rr=F-a-fw,alL=!annex&&L>=3,alR=!annex&&Rr>=3;
+  const host=annex?{wall:DISTRICTS[districtAt((X0+X1)/2*T,(Y0+Y1)/2*T)].walls[Math.floor(rnd()*4)],h:Math.max(.26,bd.h)}:null;
+  const add=(r,kind)=>{if(r.w<=0||r.h<=0)return;const b=blMakeB(r.x,r.y,r.w,r.h,Object.assign({rnd,kind},host||{}));if(!annex&&kind==='piece'&&rnd()<.35)b.h=Math.max(b.h,.3);b.floors=Math.max(1,Math.round(b.h*10));pieces.push(b);};
+  if(L>0){if(alL){add(R(0,L-1,0,dd));for(const t of tilesOf(R(L-1,L,0,dd)))blSetTile(t[0],t[1],ALLEY);BL8.stats.alleys++;}else add(R(0,L,0,dd));}
+  if(Rr>0){if(alR){add(R(a+fw+1,F,0,dd));for(const t of tilesOf(R(a+fw,a+fw+1,0,dd)))blSetTile(t[0],t[1],ALLEY);BL8.stats.alleys++;}else add(R(a+fw,F,0,dd));}
+  if(Dp>dd){if(!annex&&F>=6&&Dp-dd>=3&&rnd()<.6){const k=2+Math.floor(rnd()*(F-3));add(R(0,k,dd,Dp));add(R(k,F,dd,Dp));}else add(R(0,F,dd,Dp));}
+  // the shop itself: the old building object shrinks to the storefront (keeps every reference: poi.bd, missions...)
+  const S=R(a,a+fw,0,dd);bd.x0=S.x*T;bd.y0=S.y*T;bd.x1=(S.x+S.w)*T;bd.y1=(S.y+S.h)*T;bd.bl8=annex?'annex':'shop';bd.heli=false;bd.det=[];
+  bd.h=annex?.075:.1+rnd()*.05;bd.floors=1;if(!annex){const wl=BL8.shopPal[Math.floor(rnd()*BL8.shopPal.length)];bd.wN=shade(wl,.95);bd.wS=shade(wl,.6);bd.wE=shade(wl,.72);bd.wW=shade(wl,.84);bd.roof=shade(wl,1.15);bd.rim=shade(wl,.85);}
+  else{const wl=host.wall;bd.wN=shade(wl,1.05);bd.wS=shade(wl,.68);bd.wE=shade(wl,.8);bd.wW=shade(wl,.92);bd.roof=shade('#b8b0a0',1);bd.rim=shade('#8a8270',1);bd.host8=pieces;}
+  // door in the middle of the storefront
+  const fm=a+fw/2;if(s===0||s===1){o.door={x:(X0+fm)*T,y:s===0?bd.y0:bd.y1};o.spot={x:o.door.x,y:o.door.y+(s===0?-16:16)};}
+  else{o.door={x:s===2?bd.x0:bd.x1,y:(Y0+fm)*T};o.spot={x:o.door.x+(s===2?-16:16),y:o.door.y};}
+  for(const b of pieces)buildings.push(b);
+  for(let ty=S.y;ty<S.y+S.h;ty++)for(let tx=S.x;tx<S.x+S.w;tx++)blMini(tx,ty,annex?[96,84,70]:[78,74,90]);
+  BL8.stats.split++;BL8.stats.pieces+=pieces.length;if(annex)BL8.stats.annex++;BL8.log.push([o.type,o.name,F+'x'+Dp,'->',S.w+'x'+S.h,pieces.length]);return true;}
+function tilesOf(r){const a=[];for(let y=r.y;y<r.y+r.h;y++)for(let x=r.x;x<r.x+r.w;x++)a.push([x,y]);return a;}
+(function blRun(){try{const rnd=mulberry32(6060);for(const o of pois.slice()){if(!BL8.small.includes(o.type))continue;if(!blSplit(o,rnd))BL8.stats.skipped++;}
+  if(typeof chunkCache!=='undefined')chunkCache.clear();}catch(e){console.error('v6b split',e);}})();
 
 // ======================================================================
 //  v5f: FISHING - spots on docks / piers / marina / port / beach, or from a
@@ -4833,6 +4889,82 @@ drawBuildings=(o=>function(){nkDrawGroundToks();if(typeof W4!=='undefined'&&W4.g
   g.setTransform(1,0,0,1,0,0);})(drawBuildings);
 window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get nk(){return{NK8,nkBuild,nkGroupAt,nkCovered,nkHoles};}}));
 
+// v6c: 45-degree cut corners.  Some corner buildings lose their outer corner tile diagonally; shops on a corner get their door
+// on the diagonal (corner entrance).  The cut tile becomes sidewalk on the tile grid and keeps a triangle of building that is
+// handled by a tiny extra collision test (only for the few cut tiles, via a lookup array), drawn as a 5-sided extruded box.
+const CUT8={list:[],at:new Int16Array(N*N),stats:{shop:0,plain:0,doors:0,pushes:0},pPlain:.2};
+CUT8.at.fill(-1);
+function cutCorners(bd){const X0=bd.x0/T,Y0=bd.y0/T,X1=bd.x1/T-1,Y1=bd.y1/T-1;const out=[];
+  const S=(x,y)=>tileAt(x,y)===SIDE;
+  if(S(X0-1,Y0)&&S(X0,Y0-1)&&S(X0-1,Y0-1))out.push({c:'nw',tx:X0,ty:Y0});
+  if(S(X1+1,Y0)&&S(X1,Y0-1)&&S(X1+1,Y0-1))out.push({c:'ne',tx:X1,ty:Y0});
+  if(S(X1+1,Y1)&&S(X1,Y1+1)&&S(X1+1,Y1+1))out.push({c:'se',tx:X1,ty:Y1});
+  if(S(X0-1,Y1)&&S(X0,Y1+1)&&S(X0-1,Y1+1))out.push({c:'sw',tx:X0,ty:Y1});return out;}
+function cutApply(bd,k){const x=k.tx*T,y=k.ty*T,r2=Math.SQRT1_2;let A,B,n;
+  if(k.c==='nw'){A=[x+T,y];B=[x,y+T];n=[-r2,-r2];}else if(k.c==='ne'){A=[x,y];B=[x+T,y+T];n=[r2,-r2];}
+  else if(k.c==='se'){A=[x+T,y];B=[x,y+T];n=[r2,r2];}else{A=[x,y];B=[x+T,y+T];n=[-r2,r2];}
+  const e={bd,c:k.c,tx:k.tx,ty:k.ty,A,B,n,mid:[(A[0]+B[0])/2,(A[1]+B[1])/2]};CUT8.at[k.ty*N+k.tx]=CUT8.list.length;CUT8.list.push(e);
+  blSetTile(k.tx,k.ty,SIDE);bd.cut=e;bd.heli=false;
+  bd.det=bd.det.filter(q=>!(q.x<x+T+4&&q.x+q.w>x-4&&q.y<y+T+4&&q.y+q.h>y-4));return e;}
+// inside the building part of a cut tile?
+function cutInside(px,py){const tx=Math.floor(px/T),ty=Math.floor(py/T);if(tx<0||ty<0||tx>=N||ty>=N)return false;const i=CUT8.at[ty*N+tx];if(i<0)return false;
+  const e=CUT8.list[i];return (px-e.A[0])*e.n[0]+(py-e.A[1])*e.n[1]<0;}
+(function cutRun(){try{const rnd=mulberry32(4545);
+  // shops first: a storefront on a block corner gets a corner entrance on the diagonal
+  for(const o of pois){const bd=o.bd;if(!bd||bd.bl8!=='shop'||bd.cut||bd.nk||bd.garage)continue;if((bd.x1-bd.x0)<2*T||(bd.y1-bd.y0)<2*T)continue;
+    const cs=cutCorners(bd);if(!cs.length||rnd()<.25)continue;
+    // prefer the corner on the door side
+    const dsd=o.side,onSide=k=>(dsd===0&&k.c[0]==='n')||(dsd===1&&k.c[0]==='s')||(dsd===2&&k.c[1]==='w')||(dsd===3&&k.c[1]==='e');
+    const k=cs.find(onSide)||cs[0];const e=cutApply(bd,k);CUT8.stats.shop++;
+    o.door={x:e.mid[0],y:e.mid[1]};o.spot={x:e.mid[0]+e.n[0]*18,y:e.mid[1]+e.n[1]*18};o.n=[e.n[0],e.n[1]];o.side=4;o.corner8=true;CUT8.stats.doors++;}
+  // a few ordinary corner buildings too
+  for(const bd of buildings){if(bd.cut||bd.poi||bd.nk||bd.garage||bd.rural||bd.ship5||bd.heli||bd.h<.09)continue;const X0=bd.x0/T,Y0=bd.y0/T,X1=bd.x1/T,Y1=bd.y1/T;
+    if(![X0,Y0,X1,Y1].every(Number.isInteger)||X1-X0<3||Y1-Y0<3)continue;const cs=cutCorners(bd);if(!cs.length||rnd()>CUT8.pPlain)continue;
+    cutApply(bd,cs[Math.floor(rnd()*cs.length)]);CUT8.stats.plain++;}
+  if(typeof chunkCache!=='undefined')chunkCache.clear();}catch(e){console.error('v6c cut',e);}})();
+// ---- collision: circles (player, peds, car hull circles) slide along the diagonal
+resolveCircleTiles=(o=>function(p,r){const res=o(p,r);if(!CUT8.list.length)return res;
+  const tx0=Math.floor((p.x-r)/T),tx1=Math.floor((p.x+r)/T),ty0=Math.floor((p.y-r)/T),ty1=Math.floor((p.y+r)/T);let nx=res?res.x:0,ny=res?res.y:0,hit=!!res;
+  for(let ty=ty0;ty<=ty1;ty++)for(let tx=tx0;tx<=tx1;tx++){if(tx<0||ty<0||tx>=N||ty>=N)continue;const i=CUT8.at[ty*N+tx];if(i<0)continue;const e=CUT8.list[i];
+    if((p.lvl|0)!==0)continue;
+    const dx=p.x-e.A[0],dy=p.y-e.A[1],sd=dx*e.n[0]+dy*e.n[1];if(sd>=r||sd<-T)continue;
+    const ex=e.B[0]-e.A[0],ey=e.B[1]-e.A[1],t=(dx*ex+dy*ey)/(ex*ex+ey*ey);if(t<-.02||t>1.02)continue;
+    const pen=r-sd;p.x+=e.n[0]*pen;p.y+=e.n[1]*pen;nx+=e.n[0];ny+=e.n[1];hit=true;CUT8.stats.pushes++;}
+  return hit?{x:nx,y:ny}:null;})(resolveCircleTiles);
+// line of sight is blocked by the building half of a cut tile
+los=(o=>function(x0,y0,x1,y1){if(!o(x0,y0,x1,y1))return false;if(!CUT8.list.length)return true;const d=Math.hypot(x1-x0,y1-y0),n=Math.ceil(d/12);
+  for(let i=1;i<n;i++){const t=i/n;if(cutInside(x0+(x1-x0)*t,y0+(y1-y0)*t))return false;}return true;})(los);
+// ---- drawing: 5-sided footprint, walls that face the camera, roof polygon with rim, corner door on the diagonal
+function cutPoly(bd){const e=bd.cut,{x0,y0,x1,y1}=bd,s=T;
+  if(e.c==='nw')return[[x0+s,y0],[x1,y0],[x1,y1],[x0,y1],[x0,y0+s]];if(e.c==='ne')return[[x0,y0],[x1-s,y0],[x1,y0+s],[x1,y1],[x0,y1]];
+  if(e.c==='se')return[[x0,y0],[x1,y0],[x1,y1-s],[x1-s,y1],[x0,y1]];return[[x0,y0],[x1,y0],[x1,y1],[x0+s,y1],[x0,y1-s]];}
+function cutDraw(bd){const h=bd.h,P5=cutPoly(bd),o=bd.poi;g.setTransform(1,0,0,1,0,0);
+  for(let i=0;i<P5.length;i++){const A=P5[i],B=P5[(i+1)%P5.length],ex=B[0]-A[0],ey=B[1]-A[1],len=Math.hypot(ex,ey),nx=ey/len,ny=-ex/len;
+    const mx=(A[0]+B[0])/2,my=(A[1]+B[1])/2;if((camX-mx)*nx+(camY-my)*ny<=0)continue;
+    const diag=Math.abs(nx)>.3&&Math.abs(ny)>.3,col=diag?(ny<0?bd.wN:bd.wS):Math.abs(ny)>.5?(ny<0?bd.wN:bd.wS):(nx<0?bd.wW:bd.wE);
+    const side=diag?0:Math.abs(ny)>.5?(ny<0?0:1):(nx<0?2:3);
+    let fake={floors:bd.floors,seed:bd.seed+i*31,x0:0,y0:0,poi:null};
+    if(o&&o.door){const qx=o.door.x-A[0],qy=o.door.y-A[1],t=(qx*ex+qy*ey)/(len*len),off=Math.abs(qx*nx+qy*ny);
+      if(t>=0&&t<=1&&off<3)fake.poi=Object.assign({},o,{side:side,door:side<2?{x:t*len,y:0}:{x:0,y:t*len}});}
+    if(fake.poi&&fake.poi.side!==side)fake.poi=null;
+    wall(Pj(A[0],A[1],0),Pj(B[0],B[1],0),Pj(A[0],A[1],h),Pj(B[0],B[1],h),col,fake,len,side);}
+  setWorld(h);const path=new Path2D();path.moveTo(P5[0][0],P5[0][1]);for(let i=1;i<P5.length;i++)path.lineTo(P5[i][0],P5[i][1]);path.closePath();
+  g.fillStyle=bd.roof;g.fill(path);g.save();g.clip(path);g.strokeStyle=bd.rim;g.lineWidth=8;g.stroke(path);
+  g.fillStyle='rgba(0,0,0,.08)';for(let y=bd.y0+12;y<bd.y1-6;y+=16)g.fillRect(bd.x0+4,y,bd.x1-bd.x0-8,1);g.restore();
+  for(const q of bd.det){g.fillStyle='rgba(0,0,0,.28)';g.fillRect(q.x+3,q.y+3,q.w,q.h);g.fillStyle=q.c;g.fillRect(q.x,q.y,q.w,q.h);g.fillStyle='rgba(255,255,255,.18)';g.fillRect(q.x,q.y,q.w,2);g.fillStyle='rgba(0,0,0,.25)';g.fillRect(q.x+2,q.y+q.h/2,q.w-4,1);}
+  if(o)drawRoofSign(bd);g.setTransform(1,0,0,1,0,0);}
+nkDrawPlain=(o=>function(bd){if(bd.cut)return cutDraw(bd);return o(bd);})(nkDrawPlain);
+// roof masks for the night light map: the cut corner tile is left open so street light reaches the corner sidewalk
+function cutRoofRects(bd,roofs){const add=(x0,y0,x1,y1)=>{const a=Pj(x0,y0,bd.h),b=Pj(x1,y1,bd.h);roofs.push([a[0],a[1],b[0]-a[0],b[1]-a[1]]);};
+  if(!bd.cut){add(bd.x0,bd.y0,bd.x1,bd.y1);return;}const e=bd.cut,cx=e.tx*T,cy=e.ty*T;
+  if(e.c==='nw'){add(bd.x0,cy+T,bd.x1,bd.y1);add(cx+T,bd.y0,bd.x1,cy+T);}else if(e.c==='ne'){add(bd.x0,cy+T,bd.x1,bd.y1);add(bd.x0,bd.y0,cx,cy+T);}
+  else if(e.c==='se'){add(bd.x0,bd.y0,bd.x1,cy);add(bd.x0,cy,cx,bd.y1);}else{add(bd.x0,bd.y0,bd.x1,cy);add(cx+T,cy,bd.x1,bd.y1);}}
+__game.bl8={BL8,CUT8,cutInside,cutPoly};
+// small storefront signs that are wider than their roof are drawn again after all buildings, so a taller neighbour's wall never covers the name
+drawBuildings=(o=>function(){o();if(interior)return;try{g.font='bold 11px '+FONT;
+  for(const bd of buildings){if(!bd.bl8||!bd.poi||bd.x1<vx0-60||bd.x0>vx1+60||bd.y1<vy0-40||bd.y0>vy1+40)continue;if(g.measureText(bd.poi.name).width+14<=bd.x1-bd.x0-14)continue;
+    setWorld(bd.h);drawRoofSign(bd);}g.setTransform(1,0,0,1,0,0);}catch(e){}})(drawBuildings);
+
 // ======================================================================
 //  v6t: HIDDEN TOKENS - 56 spinning gold tokens tucked all over Miami
 //  (alleys, tucked corners, parks, dock ends, beside the causeways,
@@ -5340,7 +5472,7 @@ function dnLight(){DN.stats.frames++;const wins=DN.wins;DN.wins=[];if(!DN.on||st
   for(const b of bullets){if(b.x<vx0||b.x>vx1||b.y<vy0||b.y>vy1)continue;const p=Pj(b.x,b.y,0);G2.push([0,p[0],p[1],8*sc,'#ffe0a0',.7]);}
   for(const e of explosions){const k=e.t/.6;if(k>=1.6)continue;const p=Pj(e.x,e.y,0),kk=clamp(1-k/1.6,0,1);glow(p[0],p[1],(110+k*90)*sc,kk,'#ff8a2a',.7*kk);}
   // roofs (screen rects at roof height) mask the ground lights so a street lamp never shines through a building
-  const roofs=[];for(const bd of buildings){if(bd.x1<vx0-80||bd.x0>vx1+80||bd.y1<vy0-80||bd.y0>vy1+80||!bd.h)continue;const a=Pj(bd.x0,bd.y0,bd.h),b=Pj(bd.x1,bd.y1,bd.h);roofs.push([a[0],a[1],b[0]-a[0],b[1]-a[1]]);}
+  const roofs=[];for(const bd of buildings){if(bd.x1<vx0-80||bd.x0>vx1+80||bd.y1<vy0-80||bd.y0>vy1+80||!bd.h)continue;if(typeof cutRoofRects==='function'){cutRoofRects(bd,roofs);continue;}const a=Pj(bd.x0,bd.y0,bd.h),b=Pj(bd.x1,bd.y1,bd.h);roofs.push([a[0],a[1],b[0]-a[0],b[1]-a[1]]);}
   if(typeof GAR!=='undefined')for(const Gg of GAR.list){if(Gg.x1<vx0-80||Gg.x0>vx1+80||Gg.y1<vy0-80||Gg.y0>vy1+80)continue;const a=Pj(Gg.x0,Gg.y0,Gg.H[2]),b=Pj(Gg.x1,Gg.y1,Gg.H[2]);roofs.push([a[0],a[1],b[0]-a[0],b[1]-a[1]]);}
   const wg=dnGlowSpr('#ffffff'),wc=dnConeSpr('#ffffff');
   const punch=(X,list)=>{X.globalCompositeOperation='destination-out';for(const l of list){if(l[0]===0){const [,x,y,r,a]=l;if(x+r<0||y+r<0||x-r>LW||y-r>LH)continue;X.globalAlpha=clamp(a,0,1);X.drawImage(wg,(x-r)*q,(y-r)*q,2*r*q,2*r*q);}
