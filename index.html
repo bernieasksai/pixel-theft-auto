@@ -5388,7 +5388,7 @@ PTA.time={DAY_REAL_MIN:DN_DAY_REAL_MIN,
 const ST_TIERS=[{n:'NOBODY',at:0},{n:'PROWLER',at:3},{n:'NIGHT OWL',at:10},{n:'GHOST',at:25}];
 const ST_PERK={sight:[1,.85,.74,.62],pick:[1,.85,.7,.55],noise:[1,.8,.6,.4],call:[0,1,2,3.5]};
 const ST_CFG={sight:290,copSight:340,carSight:360,minSight:34,hear:430,callT:3.5,victimT:15,crouchVis:.55,crouchSpd:.5,
-  heat:{mug:28,theft:42,carjack:50,breakin:60,assault:70,copjack:120},copHeat:{mug:60,theft:60,carjack:75,breakin:90,assault:100,copjack:150},
+  heat:{mug:16,theft:42,carjack:50,breakin:60,assault:70,copjack:120},copHeat:{mug:60,theft:60,carjack:75,breakin:90,assault:100,copjack:150},
   gang:{mug:-2,theft:-3,carjack:-4,breakin:-4,assault:-5,copjack:-3},callK:{mug:1.25,theft:1,carjack:.9,breakin:1,assault:.8,copjack:.8}};
 const ST_TOOLS=[
   {id:'slimjim',name:'Slim Jim (car tool)',price:120,tier:'CAR TOOL 1',note:'Quiet car lock picks [R]: faster, fewer car alarms',ok:()=>!tools.slimjim&&!tools.lockpick&&!tools.bypass,fn:()=>{tools.slimjim=true;}},
@@ -5748,5 +5748,44 @@ loadGame=(o=>function(){stClearSneak('loadGame');return o.apply(this,arguments);
 startFade=(o=>function(){stClearSneak('startFade');return o.apply(this,arguments);})(startFade);
 tryEnter=(o=>function(){const r=o.apply(this,arguments);if(player.inCar)stClearSneak('car');return r;})(tryEnter);
 __game.snk=SNK;
+// ---------------- v6q: every star gets a responding unit.  A 911 call used to give a star that burned off (5 s unseen, 32 heat/s)
+// long before any car was allowed to spawn (dispatch gate ETA 16-30 s, busy units zeroing the 1-star cap, stale foot-crews holding the only slot).
+const W9={susDecay:.25,delay:[4,8],spawnR:[480,800],patrolR:900,arriveR:260,searchT:10,maxEnroute:28,
+  st:{phase:'none',t:0,unit:null,due:0,ep:0},stats:{dispatch:0,patrol:0,spawn:0,arrive:0,arriveT:[],hold:0,staleCrew:0,fail:0}};
+function w9Crew(){// crews that were culled or died no longer hold a unit slot; an abandoned car drives on
+  for(const c of cars){if(!c.deployed||c.wreck||c.driver)continue;const n=peds.filter(p=>p.w8car===c&&!p.dead&&!p.w8gone).length;
+    if(n!==(c.w8crew|0)){W9.stats.staleCrew++;c.w8crew=n;}if(n===0&&c.type==='police'&&c.ai)w8Reboard(c);}}
+function w9Responding(){for(const c of cars)if(c.type==='police'&&c.driver==='cop'&&!c.wreck&&c.ai&&c.ai.mode==='chase')return c;
+  for(const p of peds)if(p.cop&&!p.dead&&!p.off&&!p.w8back&&!p.w8gone&&p.w8car)return p.w8car;return null;}
+function w9Dispatch(){const tg=player.inCar||player;let c=null,best=W9.patrolR;
+  for(const k of cars){if(k.type!=='police'||k.driver!=='cop'||k.wreck||k.deployed||!k.ai||k.ai.mode==='chase'||k.ai.job)continue;const d=Math.hypot(k.x-tg.x,k.y-tg.y);if(d<best){best=d;c=k;}}
+  if(c){c.ai.mode='chase';c.ai.stuck=0;c.ai.rev=0;c.ai.navT=0;W9.stats.patrol++;}
+  else{const n0=cars.length;for(let i=0;i<6&&cars.length===n0;i++)spawnChase(W9.spawnR[0],W9.spawnR[1]);if(cars.length>n0){c=cars[cars.length-1];W9.stats.spawn++;}}
+  if(!c){W9.stats.fail++;return null;}c.siren=true;c.w9resp=true;W9.stats.dispatch++;try{if(typeof AL!=='undefined')AL.gate=null;}catch(e){}return c;}
+function w9Spotted(tg){for(const c of cars)if(c.driver==='cop'&&!c.wreck&&c.ai&&c.ai.mode==='chase'&&Math.hypot(c.x-tg.x,c.y-tg.y)<360&&los(c.x,c.y,tg.x,tg.y))return true;
+  for(const p of peds)if(p.cop&&!p.dead&&!p.off&&Math.hypot(p.x-tg.x,p.y-tg.y)<300&&los(p.x,p.y,tg.x,tg.y))return true;return false;}
+function w9Tick(dt,h0){if(state!=='play')return;const S=W9.st,tg=player.inCar||player;
+  // below one star it's only suspicion: it fades slowly, so a string of small crimes adds up (3 quick witnessed muggings = 1 star)
+  if(stars<1&&heat>0&&heat<h0&&h0-heat<4){heat=Math.max(0,h0-W9.susDecay*dt);}
+  if(stars<1||!player.active){if(S.phase!=='none'){S.phase='none';S.unit=null;}return;}
+  if(interior)return;
+  const resp=w9Responding();
+  if(S.phase==='none'){S.phase='due';S.t=0;S.due=rr(W9.delay[0],W9.delay[1]);S.ep++;S.seen=false;S.tAll=0;S.re=0;}
+  if(!S.seen&&w9Spotted(tg))S.seen=true;// once a cop has had eyes on you it's a normal chase: lose them and the stars burn as usual
+  if(S.phase==='due'){S.t+=dt;if(resp){S.unit=resp;S.phase='enroute';S.t=0;}else if(S.t>=S.due){const c=w9Dispatch();if(c){S.unit=c;S.phase='enroute';S.t=0;}else S.due=S.t+.5;}}
+  else if(S.phase==='enroute'){S.t+=dt;const u=S.unit,ok=u&&cars.includes(u)&&!u.wreck;
+    if(!ok){S.phase='due';S.t=0;S.due=1;}
+    else{if(u.driver==='cop'&&u.ai&&u.ai.mode!=='chase'&&!u.deployed)u.ai.mode='chase';const d=Math.hypot(u.x-tg.x,u.y-tg.y);
+      if(d<W9.arriveR||u.deployed){S.phase='search';W9.stats.arrive++;W9.stats.arriveT.push(+(S.tAll=(S.tAll||0)+S.t).toFixed(1));S.t=0;}
+      else if(S.t>9&&d>W9.arriveR*2&&(S.re|0)<2&&!inView(u.x,u.y,40)&&u.w9resp){S.re=(S.re|0)+1;S.tAll=(S.tAll||0)+S.t;S.t=0;W9.stats.redispatch=(W9.stats.redispatch|0)+1;cars.splice(cars.indexOf(u),1);const sr=W9.spawnR;W9.spawnR=[420,600];let c;try{c=w9Dispatch();}finally{W9.spawnR=sr;}S.unit=c;if(!c){S.phase='due';S.due=S.t+.5;}}
+      else if((S.tAll||0)+S.t>W9.maxEnroute){S.phase='search';S.t=0;}}}
+  else if(S.phase==='search'){S.t+=dt;if(S.t>W9.searchT)S.phase='burn';}
+  else if(S.phase==='burn'){if(!resp&&!peds.some(p=>p.cop&&!p.dead&&p.w8car)){S.phase='due';S.t=0;S.due=rr(4,8);}}// nobody left on it: send another
+  // the star holds while the call is being answered and the area searched; after that it burns down as usual
+  if(!S.seen&&stars<=2&&(S.phase==='due'||S.phase==='enroute'||S.phase==='search')&&heat>0&&heat<h0&&h0-heat<4){heat=h0;stars=Math.max(stars,calcStars());W9.stats.hold++;}}
+// at 1 star the dispatcher sends the one unit (no instant spawn next to you before the call is even routed)
+manage=(o=>function(){if(stars===1&&W9.st.phase==='due'){const v=MAXCOPS[1];MAXCOPS[1]=0;try{return o();}finally{MAXCOPS[1]=v;}}return o();})(manage);
+update=(o=>function(dt){const h0=heat;try{if(state==='play')w9Crew();}catch(e){}o(dt);try{w9Tick(dt,h0);}catch(e){console.error(e);}})(update);
+__game.w9=W9;
 
 </script></body></html>
