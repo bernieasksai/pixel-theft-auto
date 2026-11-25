@@ -343,7 +343,7 @@ function manage(){manageExtras();const vr=Math.hypot(LW,LH)/2/S,r0=vr+30,r1=r0+3
   for(const p of peds){if(p.dead)ndead++;else if(!p.cop&&p.gar==null)np++;}
   for(const c of cars){if(c.driver==='ai'||(c.driver==='cop'&&c.ai.mode==='traffic'))nc++;else if(!c.driver&&!c.wreck&&c.gar==null)npark++;if(c.ai&&c.ai.mode==='chase')nchase++;}
   for(const k of pickups)if(k.type!=='cash')npk++;
-  for(let i=0;i<5&&np<PEDS*dnPedMul();i++,np++)spawnPed(r0,r0+220);
+  pzSpawn(r0,np);
   if(nc<TRAFFIC*dnCarMul())spawnTraffic(r0,r1+150,R()<.12);
   if(npark<PARKED)spawnParked(r0,r1+400);
   if(npk<7)spawnPickup(r0,r1+500);
@@ -6030,5 +6030,77 @@ respawn=(o=>function(){const r=o.apply(this,arguments);if(state!=='play')return 
     if(!cop||!hurt)return true;if(Math.abs(c.x-tg.x)<hw&&Math.abs(c.y-tg.y)<hh)return true;RS8.stats.despawn++;return false;});
   return r;})(respawn);
 __game.rs=RS8;
+
+// ---------- v6z: ped density by district and hour ----------
+// Root cause (v6y and before): manage() (every 0.2 s) refilled peds 5 at a time (25/s) up to one
+// GLOBAL cap (85 x hour curve) counted over a ~965 px disc, the same in every district. The Port is
+// Dockside Union turf and every spawn call also rolled a gang crew of 2-3 (48% at night,
+// cap 7 -> 11 with the night boost), and gangs were never thinned. So walking in the docks
+// at night refilled up to ~50 plain peds plus ~11 gang members in bursts at the screen edge.
+// Now: a per-district, per-hour LOCAL target around the player, eased over a few seconds,
+// a spawn rate limit, spawns spread out and always off-screen, and slow off-screen thinning
+// (plain peds first, then calm gang members) when the area is over its target.
+const PZ={tgt:-1,want:0,acc:0,thinAcc:0,spreadOn:false,stats:{spawn:0,rej:0,thin:0,thinG:0,gangCut:0,workers:0},
+  kind:{'DOWNTOWN':'core','OLD TOWN':'core','SOUTH BEACH':'beach','OCEAN DRIVE':'beach','SOUTH BEACH SANDS':'beach',
+    'INDUSTRIAL':'ind','PORT OF MIAMI':'ind','RIVERSIDE':'res','BAYSIDE':'res','MARINA':'res','PIXEL COUNTY':'rural'},
+  //            0    1    2    3    4    5    6    7    8    9   10   11   12   13   14   15   16   17   18   19   20   21   22   23   24
+  curve:{core: [.46,.34,.22,.2, .21,.28,.5, .82,1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  .98,.92,.8, .66,.54,.42],
+         beach:[.62,.55,.42,.36,.3, .3, .42,.62,.85,.95,1,  1,  1,  1,  1,  1,  1,  1,  1,  .95,.9, .85,.8, .72,.62],
+         ind:  [.05,.04,.04,.04,.05,.14,.42,.75,.9, 1,  1,  1,  1,  1,  1,  1,  .95,.75,.42,.22,.11,.07,.06,.05,.05],
+         res:  [.34,.24,.14,.12,.14,.24,.46,.78,.95,.9, .85,.85,.9, .9, .85,.85,.9, .95,1,  .95,.85,.7, .56,.45,.34],
+         rural:[.3, .2, .12,.1, .12,.2, .45,.8, 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  .9, .75,.6, .48,.38,.3],
+         sea:  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  peak:{core:72,beach:96,ind:26,res:50,rural:56,sea:0}};
+function pzKindAt(x,y){const d=DISTRICTS[districtAt(x,y)];if(!d)return 'sea';return PZ.kind[d.name]||'sea';}
+function pzR(){const vr=Math.hypot(LW,LH)/2/S;return {vr,r0:vr+30,LR:vr+240};}
+// wanted count near (x,y) at hour h: blend 5 samples (centre counts double) so district edges ramp instead of snapping
+function pzWantAt(x,y,m){const h=dnHourF(m),i=Math.floor(h),f=h-i;let s=0,n=0;
+  for(const [ox,oy,w] of [[0,0,2],[300,0,1],[-300,0,1],[0,300,1],[0,-300,1]]){const k=pzKindAt(x+ox,y+oy);if(k==='sea')continue;const C=PZ.curve[k];s+=w*PZ.peak[k]*(C[i]+(C[i+1]-C[i])*f);n+=w;}
+  return n?s/Math.max(n,3):0;}// water around the edge scales down, but a lone pier does not empty to zero
+function pzCountable(p){return !p.dead&&!p.cop&&p.gar==null&&!p.keep&&p.kind!=='hooker';}
+function pzLocal(){const {LR}=pzR();let n=0,g=0;for(const p of peds){if(!pzCountable(p))continue;if(Math.hypot(p.x-focus.x,p.y-focus.y)<LR){n++;if(p.gang)g++;}}return {n,g};}
+function pzGangCap(){const t=PZ.tgt;return t<6?(t<2.5?1:2):Math.min(Math.round(7*dnGangMul()),Math.round(2+t*.08));}
+function pzPlain(p){return p.kind==='ped'&&!p.gang&&!p.hostile&&!p.job&&!p.goCar&&!p.medic&&!p.mission&&!p.mugged&&!p.inj&&!p.towOp&&!p.xing&&!(p.calling>0)&&!(typeof ST!=='undefined'&&ST.calls.some(c=>c.q===p));}
+function pzCalmGang(p){return p.gang&&!p.hostile&&!(p.r7angry>0)&&!p.r7target&&!p.job&&!p.mission;}
+// spread rule used by ringTile while PZ.spreadOn: off-screen with margin, nobody within 90 px
+ringTile=(o=>function(r0,r1,pred){if(!PZ.spreadOn)return o(r0,r1,pred);
+  return o(r0,r1,(t,tx,ty)=>{if(!pred(t,tx,ty))return false;const x=(tx+.5)*T,y=(ty+.5)*T;if(inView(x,y,40)){PZ.stats.rej++;return false;}
+    for(const q of peds)if(!q.dead&&Math.abs(q.x-x)<90&&Math.abs(q.y-y)<90&&Math.hypot(q.x-x,q.y-y)<90){PZ.stats.rej++;return false;}return true;});})(ringTile);
+function pzSpawnOne(r0){const n0=peds.length;PZ.spreadOn=true;try{spawnPed(r0,r0+220);}finally{PZ.spreadOn=false;}
+  if(peds.length===n0)return 0;const {LR}=pzR(),cap=pzGangCap();let g=0;
+  for(const q of peds)if(q.gang&&!q.dead&&peds.indexOf(q)<n0&&Math.hypot(q.x-focus.x,q.y-focus.y)<LR)g++;
+  let crew=0;const crewMax=PZ.tgt<30?2:3;// quieter districts get pairs, not trios walking on screen at once
+  for(let i=n0;i<peds.length;i++){const q=peds[i];
+    if(q.gang){if(g>=cap||crew>=crewMax){peds.splice(i,1);i--;PZ.stats.gangCut++;continue;}g++;crew++;}
+    else if(q.kind==='ped'&&pzKindAt(q.x,q.y)==='ind'&&DN.dark>.4&&R()<.5){q.shirt='#e8b020';if(q.outfit&&q.outfit.top)q.outfit.top.c='#e8b020';q.pz_worker=true;PZ.stats.workers++;}}
+  const added=peds.length-n0;PZ.stats.spawn+=added;return added;}
+// called from manage() instead of the old "5 per tick up to the global cap" line
+function pzSpawn(r0,np){if(state!=='play'){if(np<PEDS*dnPedMul())for(let i=0;i<5&&np<PEDS*dnPedMul();i++,np++)spawnPed(r0,r0+220);return;}
+  const dt=Math.min(.5,Math.max(0,gtime-(PZ.lastT==null?gtime:PZ.lastT)));PZ.lastT=gtime;
+  const want=pzWantAt(focus.x,focus.y);PZ.want=want;if(PZ.tgt<0)PZ.tgt=want;else PZ.tgt+=(want-PZ.tgt)*Math.min(1,dt/4);
+  const L=pzLocal();PZ.local=L.n;PZ.localG=L.g;if(np>=PEDS+18){PZ.acc=0;return;}
+  const def=PZ.tgt-L.n;if(def<=.5){PZ.acc=Math.min(PZ.acc,.5);return;}
+  PZ.acc+=dt*Math.min(6,.8+def*.3);let k=0;while(PZ.acc>=1&&k<3){PZ.acc-=1;k++;pzSpawnOne(r0);}}
+// off-screen thinning toward the local target (also trims far leftovers beyond the local disc)
+function pzThin(dt){if(state!=='play'||interior||PZ.tgt<0)return;const {LR,vr}=pzR();const L=pzLocal();PZ.local=L.n;PZ.localG=L.g;
+  const over=L.n-(PZ.tgt+2);let far=0;for(const p of peds)if(pzCountable(p)&&Math.hypot(p.x-focus.x,p.y-focus.y)>=LR)far++;
+  const farOver=far-Math.max(4,PZ.tgt*.08);if(over<=0&&farOver<=0&&L.g<=pzGangCap()+1){PZ.thinAcc=0;return;}
+  PZ.thinAcc+=dt*Math.min(4,1+Math.max(over,farOver,0)*.25);if(PZ.thinAcc<1)return;PZ.thinAcc-=1;
+  // farthest off-screen plain ped first; gang members only when the crew is over its cap
+  let best=null,bd=-1,gangOver=L.g>pzGangCap()+1;
+  for(const p of peds){if(!pzCountable(p)||inView(p.x,p.y,80))continue;const d=Math.hypot(p.x-focus.x,p.y-focus.y);
+    if(d<vr*.6)continue;const ok=pzPlain(p)||(gangOver&&pzCalmGang(p)&&d<LR);if(!ok)continue;if(over<=0&&d<LR&&!(gangOver&&p.gang))continue;
+    if(d>bd){bd=d;best=p;}}
+  if(best){const i=peds.indexOf(best);if(i>=0){peds.splice(i,1);PZ.stats.thin++;if(best.gang)PZ.stats.thinG++;DN.thinned=(DN.thinned||0)+1;}}}
+dnThin=function(){};// replaced by pzThin (keeps DN.thinned counting)
+update=(o=>function(dt){o(dt);try{pzThin(dt);}catch(e){}})(update);
+// fresh game / respawn: snap the target, and trim the start-up crowd off-screen right away
+function pzSnap(trim){PZ.tgt=pzWantAt(focus.x,focus.y);PZ.acc=0;PZ.thinAcc=0;PZ.lastT=gtime;if(!trim)return;
+  const keep=Math.ceil(PZ.tgt*1.1)+2;const pl=peds.filter(p=>pzCountable(p)&&pzPlain(p));let n=peds.filter(pzCountable).length;
+  pl.sort((a,b)=>Math.hypot(b.x-focus.x,b.y-focus.y)-Math.hypot(a.x-focus.x,a.y-focus.y));
+  for(const p of pl){if(n<=keep)break;if(inView(p.x,p.y,0)&&n<=keep*1.6)continue;const i=peds.indexOf(p);if(i>=0){peds.splice(i,1);n--;}}}
+startGame=(o=>function(){const r=o.apply(this,arguments);try{focus.x=player.x;focus.y=player.y;pzSnap(true);}catch(e){}return r;})(startGame);
+respawn=(o=>function(){const r=o.apply(this,arguments);try{pzSnap(false);}catch(e){}return r;})(respawn);
+if(typeof __game!=='undefined')__game.pz=PZ;
 
 </script></body></html>
