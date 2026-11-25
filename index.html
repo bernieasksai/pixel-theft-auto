@@ -1487,7 +1487,7 @@ const LOOT={tv:{name:'Flatscreen TV',val:320,w:6,noise:22},laptop:{name:'Laptop'
   painting:{name:'Painting',val:520,w:4,noise:10},camera:{name:'DSLR Camera',val:300,w:1,noise:3},guitar:{name:'Electric Guitar',val:280,w:3,noise:14}};
 const HOT_TIME=480;
 const carryCap=()=>8+(tools.bag?6:0)+stats.stam;
-const carryW=()=>player.inv.reduce((s,i)=>s+i.w,0);
+const carryW=()=>Math.round(player.inv.reduce((s,i)=>s+(+i.w||0),0)*10)/10;
 function addLoot(k){const L=LOOT[k];if(carryW()+L.w>carryCap()){msg('TOO HEAVY! ('+carryW()+'/'+carryCap()+' kg) SELL OR STASH FIRST','#f88',1.8);sfx('hurt');return false;}
   player.inv.push({k,name:L.name,val:Math.round(L.val*rr(.8,1.25)),w:L.w,hotT:HOT_TIME});msg('+ '+L.name.toUpperCase()+'  ('+carryW()+'/'+carryCap()+' kg)','#ffd080',1.6);sfx('pick');gainXP(4);return true;}
 function pawnOffer(o,it){return Math.round(it.val*(.5+.2*hash2(o.id*7+it.val,it.w))*(it.hotT>0?.6:1));}
@@ -4045,11 +4045,56 @@ carPhysics=(o=>function(c,dt){o(c,dt);if(c.boat||c.sink>0)return;const t=tileW(c
   if(sp>40&&R()<dt*30)addP(c.x-Math.cos(c.a)*c.L/2+rr(-4,4),c.y-Math.sin(c.a)*c.L/2+rr(-4,4),-c.vx*.15+rr(-25,25),-c.vy*.15+rr(-25,25),rr(.3,.6),3,pick(['#d8bc84','#e6cc98','#c8a870']),false);})(carPhysics);
 window.__game&&Object.defineProperties(window.__game,Object.getOwnPropertyDescriptors({get beach(){return{SANDV5,WET5,M5,distAt5,SAND,SEA};}}));
 
+// v8t: Bait & Tackle shops on the coast (placed before v6b so they get real storefronts + signs like other small shops).
+POI_DEF.tackle={label:'Bait & Tackle',col:'#3ad0a0',glyph:'H',names:['REEL DEAL TACKLE','HOOKED BAIT & TACKLE','SALTY DOG TACKLE']};
+SHOP5.tackle='store';ROB5.tackle=[150,420];
+GPS_DEST.push(['tackle','Bait & Tackle shop']);
+const V8T={log:[],placed:[]};
+function v8tPlace(targets,relax){const rnd=mulberry32(808),cands=[],dIdx=n=>DISTRICTS.findIndex(d=>d.name===n);
+  const wet=(bd)=>{const x0=bd.x0/T-7,x1=bd.x1/T+7,y0=bd.y0/T-7,y1=bd.y1/T+7;let n=0;for(let ty=y0;ty<y1;ty+=1)for(let tx=x0;tx<x1;tx+=1){const t=tileAt(tx|0,ty|0);if(t===SEA||t===WATER)n++;}return n;};
+  for(const bd of buildings){if(bd.poi||bd.ship5||bd.garage||bd.rural||bd.h<(relax?.05:.09))continue;const tx0=bd.x0/T,tx1=bd.x1/T-1,ty0=bd.y0/T,ty1=bd.y1/T-1;
+    if(![tx0,tx1,ty0,ty1].every(Number.isInteger))continue;const mxT=Math.floor((bd.x0+bd.x1)/2/T),myT=Math.floor((bd.y0+bd.y1)/2/T),opts=[];const S1=t=>t===SIDE||relax&&t!==BLD&&t!==WATER&&t!==SEA,S2=t=>t===ROAD||relax&&(t===SIDE||t===DOCK||t===SAND);
+    if(S1(tileAt(mxT,ty0-1))&&S2(tileAt(mxT,ty0-2)))opts.push({side:0,door:{x:(mxT+.5)*T,y:bd.y0},spot:{x:(mxT+.5)*T,y:bd.y0-16},n:[0,-1]});
+    if(S1(tileAt(mxT,ty1+1))&&S2(tileAt(mxT,ty1+2)))opts.push({side:1,door:{x:(mxT+.5)*T,y:bd.y1},spot:{x:(mxT+.5)*T,y:bd.y1+16},n:[0,1]});
+    if(S1(tileAt(tx0-1,myT))&&S2(tileAt(tx0-2,myT)))opts.push({side:2,door:{x:bd.x0,y:(myT+.5)*T},spot:{x:bd.x0-16,y:(myT+.5)*T},n:[-1,0]});
+    if(S1(tileAt(tx1+1,myT))&&S2(tileAt(tx1+2,myT)))opts.push({side:3,door:{x:bd.x1,y:(myT+.5)*T},spot:{x:bd.x1+16,y:(myT+.5)*T},n:[1,0]});
+    if(!opts.length)continue;const w=0;const cx=(bd.x0+bd.x1)/2,cy=(bd.y0+bd.y1)/2;cands.push({bd,opts,cx,cy,dist:districtAt(cx,cy),wet:w});}
+  const okSpot=s=>atms.every(a=>Math.hypot(a.x-s.x,a.y-s.y)>40)&&pois.every(p=>Math.hypot(p.spot.x-s.x,p.spot.y-s.y)>60)&&(!relax||LAMP.list.every(l=>Math.hypot(l.x-s.x,l.y-s.y)>=40));
+  // one shop near each fishing area (same tile coords as the v5f fishing spots): marina docks, beach surf, port piers
+  const def=POI_DEF.tackle;
+  for(const [tn,tx,ty] of targets){const X=tx*T,Y=ty*T;
+    let pool=cands.filter(c=>!c.bd.poi&&V8T.placed.every(p=>Math.hypot(p.door.x-c.cx,p.door.y-c.cy)>900)).map(c=>({c,d:Math.hypot(c.cx-X,c.cy-Y)})).sort((a,b)=>a.d-b.d).slice(0,4);
+    if(!pool.length){V8T.log.push('noplace:'+tn);continue;}
+    let ch=null,op=null;for(const e of pool){const c=e.c;const oo=c.opts.filter(o=>okSpot(o.spot));if(!oo.length)continue;ch=c;oo.sort((a,b)=>Math.hypot(a.spot.x-X,a.spot.y-Y)-Math.hypot(b.spot.x-X,b.spot.y-Y));op=oo[0];break;}
+    if(!ch){V8T.log.push('nospot:'+tn);continue;}
+    const o={type:'tackle',name:def.names[V8T.placed.length%def.names.length],bd:ch.bd,side:op.side,door:op.door,spot:op.spot,n:op.n,empty:0,id:pois.length,v5:true,v8:true,area:tn};
+    ch.bd.poi=o;ch.bd.heli=false;ch.bd.det=[];pois.push(o);V8T.placed.push(o);V8T.log.push(o.name+'@'+tn+'/'+DISTRICTS[ch.dist].name+' '+Math.round(o.door.x/T)+','+Math.round(o.door.y/T));}}
+// marina shop now (gets a v6b storefront); beach + pier shops go on v6b's small pieces / pier sheds (v8i calls v8tLate)
+try{v8tPlace([['MARINA',165,84]],false);}catch(e){V8T.log.push('err:'+e);console.error(e);}
+v5Room=(o=>function(q){if(q.type!=='tackle')return o(q);
+  const r={poi:q,type:'tackle',w:340,h:220,props:[],npcs:[],spots:[],deco:[],fx:[],tracers:[],floor:['#d6e8e2','#c8ddd6'],wall:'#2a6a7a',rob:null,alarmed:false,clerkDead:false};
+  const P_=(x,y,w,h,kind,c,solid)=>r.props.push({x,y,w,h,kind,c,solid:solid!==false});
+  P_(110,38,130,16,'counter','#7a5a3a');P_(200,40,14,9,'register','#888',false);r.clerk=npc(175,26,'clerk',{shirt:'#2a8a6a'});r.npcs.push(r.clerk);
+  r.spots.push({x:175,y:72,r:26,key:'E',label:'Rods, reels, bait + sell fish',act:()=>openShop(q),cond:()=>!r.rob&&!r.clerkDead&&!r.clerk.hostile});
+  r.spots.push({x:175,y:72,r:26,key:'R',label:()=>r.clerkDead?'Loot the register':'Rob the place'+(player.wp===0?' (need a weapon)':''),act:()=>startRobbery(r),cond:()=>!r.rob&&q.empty<gtime});
+  for(const y of[100,150])for(const x of[30,190])P_(x,y,120,14,'shelf','#5a7a6a');P_(318,70,14,120,'fridge','#9ad');P_(8,60,12,110,'shelf','#8a5a30');
+  r.deco.push({kind:'neon',x:90,c:'#3ad0a0',text:'BAIT & TACKLE'},{kind:'poster',x:270,c:'#3af',text:'LIVE BAIT'});
+  r.door={x:r.w/2,y:r.h-4};r.spots.push({x:r.w/2,y:r.h-12,r:18,key:'E',label:'Exit to the street',act:exitInterior});return r;})(v5Room);
+function v8tLate(){try{v8tPlace([['BEACH',202,60],['PIERS',70,174]],true);const rnd=mulberry32(809);
+  for(const o of V8T.placed){if(o.area==='MARINA')continue;const bd=o.bd;let split=false;if(!bd.bl8){try{split=blSplit(o,rnd);}catch(e){V8T.log.push('split:'+e);}}
+    if(!split){bd.bl8='shop';bd.h=Math.max(bd.h,.1);bd.floors=1;bd.det=[];}
+    const wl=o.area==='PIERS'?'#7fb8a8':'#9fd0c0';bd.wN=shade(wl,.95);bd.wS=shade(wl,.6);bd.wE=shade(wl,.72);bd.wW=shade(wl,.84);bd.roof=shade('#c8b890',1);bd.rim=shade('#a89870',1);
+    // keep the door clear of streetlights (lamps were placed before this shop existed): slide it along the storefront
+    const lampNear=sp=>LAMP.list.some(l=>Math.hypot(l.x-sp.x,l.y-sp.y)<40);if(lampNear(o.spot)){const vert=o.n[0]!==0,lo=vert?bd.y0:bd.x0,hi=vert?bd.y1:bd.x1;
+      for(const off of[T,-T,2*T,-2*T,T/2,-T/2]){const d={x:o.door.x+(vert?0:off),y:o.door.y+(vert?off:0)},sp={x:o.spot.x+(vert?0:off),y:o.spot.y+(vert?off:0)},c=vert?d.y:d.x;
+        if(c<lo+T*.5||c>hi-T*.5||lampNear(sp))continue;o.door=d;o.spot=sp;V8T.log.push('door-slide:'+o.name+' '+off);break;}}
+    V8T.log.push('late:'+o.name+(split?' split':'')+' '+Math.round((bd.x1-bd.x0)/T)+'x'+Math.round((bd.y1-bd.y0)/T)+(lampNear(o.spot)?' LAMP!':''));}}catch(e){V8T.log.push('err2:'+e);console.error(e);}}
+
 // v6b: realistic shop footprints.  A storefront (burger joint, pizza, bodega...) used to take a whole building, often a whole 8x8 block.
 // Now the shop gets a storefront-sized box on the street side and the rest of its block becomes other buildings (taller offices /
 // apartments, sometimes a little alley).  Bodegas are a low side shop on the ground floor of a bigger building.
 // Pure data pass at load time: buildings stay axis-aligned rectangles on the tile grid, so collision / rendering cost is unchanged.
-const BL8={small:['burger','pizza','taco','diner','cuban','seafood','video','bodega','laundry','pharm','gun','clothing','grocery','pawn'],
+const BL8={small:['burger','pizza','taco','diner','cuban','seafood','video','bodega','laundry','pharm','gun','clothing','grocery','pawn','tackle'],
   annex:['bodega'],stats:{split:0,pieces:0,alleys:0,annex:0,skipped:0},log:[],shopPal:['#c8b8a0','#d0c0a8','#b8a890','#c0b0a0','#a8b8c0','#c8c0b0']};
 function blMini(tx,ty,rgb){try{const m=mini.getContext('2d');m.fillStyle='rgb('+rgb.join(',')+')';m.fillRect(tx,ty,1,1);}catch(e){}}
 function blSetTile(tx,ty,t){map[ty*N+tx]=t;const C={0:[150,150,150],1:[95,95,95],2:[44,48,58],3:[45,100,40],5:[80,80,84],6:[70,68,66]};if(C[t])blMini(tx,ty,C[t]);}
@@ -4361,7 +4406,7 @@ drawWorldOverlays=(o=>function(){o();setWorld(0);
     g.strokeStyle='rgba(255,255,255,.7)';g.lineWidth=1.2;for(let i=0;i<2;i++){const ph=(gtime*2+i*.5)%1;g.beginPath();g.ellipse(F.bx,F.by,5+ph*18,3+ph*11,0,0,TAU);g.stroke();}}
   const F=F6;if(F&&!interior){const o=v6Origin(),ca=Math.cos(F.a),sa=Math.sin(F.a),pr=-sa,pq=ca;let tip={x:o.x+ca*(F.mode==='boat'?14:11)+pr*4,y:o.y+sa*(F.mode==='boat'?14:11)+pq*4};
     if(F.st==='charge'){const k=-F.pow*.9;tip={x:o.x+Math.cos(F.a+PI+k)*3+pr*4,y:o.y+Math.sin(F.a+PI+k)*3+pq*4};const b2=F.a+PI*.85-F.pow*.6;tip={x:o.x+Math.cos(b2)*11,y:o.y+Math.sin(b2)*11};}
-    setWorld(.02);g.strokeStyle='#5a3a1c';g.lineWidth=1.6;g.beginPath();g.moveTo(o.x+pr*3,o.y+pq*3);g.lineTo(tip.x,tip.y);g.stroke();
+    setWorld(.02);g.strokeStyle=typeof rodCol8==='function'?rodCol8():'#5a3a1c';g.lineWidth=typeof rodCol8==='function'&&I8().eq.rod!=='rod0'?2:1.6;g.beginPath();g.moveTo(o.x+pr*3,o.y+pq*3);g.lineTo(tip.x,tip.y);g.stroke();
     let bx,by,bz=0,show=true;
     if(F.st==='charge')show=false;
     else if(F.st==='cast'){const u=Math.min(1,F.t/.55);bx=tip.x+(F.bx-tip.x)*u;by=tip.y+(F.by-tip.y)*u;bz=Math.sin(u*PI)*24;}
@@ -6250,5 +6295,303 @@ PTA.weather={states:Object.keys(WX_ST),
   gripMul:()=>wxGripMul(player.inCar||{}),sightMul:wxSightMul,hearMul:wxHearMul,isRaining:()=>WX.rain>.15,isStorm:()=>WX.st==='storm',
   onChange:cb=>{WX.cbs.push(cb);return()=>{const i=WX.cbs.indexOf(cb);if(i>=0)WX.cbs.splice(i,1);};},_wx:WX};
 if(typeof __game!=='undefined')__game.wx=WX;
+
+// v8i: inventory revamp.  Big category inventory screen (weapons / attachments / tools / clothing / fishing / loot),
+// spare guns (picking up a gun you own = ammo + a sellable spare), weapon attachments (suppressor, chokes, scope, laser),
+// fishing gear (rods, reels, line, tackle box, coolers) sold at the new coastal Bait & Tackle shops (v8t).
+// State lives in career.inv8 (saved with career); spares are bag items (player.inv, k:'gun') so pawn shops / stash / save already handle them.
+v8tLate();
+const V8={stats:{spares:0,spareCap:0,sold:0,attBuy:0,gearBuy:0,supShots:0,shots:0,laserFrames:0,opens:0},log:[],err:null};
+function I8(){let s=career.inv8;if(!s||typeof s!=='object')s=career.inv8={};if(!s.att||typeof s.att!=='object')s.att={};if(!s.own||typeof s.own!=='object')s.own={};
+  if(!s.gear||typeof s.gear!=='object')s.gear={};if(!s.eq||typeof s.eq!=='object')s.eq={};for(const k of['rod','reel','line','cooler'])if(!s.eq[k]||!FG8_BY[s.eq[k]])s.eq[k]=k+'0';return s;}
+const own8=i=>i===0||player.ammo[i]>0||!!(player.owned&&player.owned[i]&&!WEAPONS[i].melee);
+// ---------------------------------------------------------------- attachments
+const ATT8=[
+  {id:'sup',slot:'muzzle',name:'Suppressor',short:'SUPP',price:450,req:2,fits:[3,4,6],fx:{dmg:.85,life:.8,quiet:1},desc:'Quiet shots: few witnesses, cops only hear you up close. -15% damage, -20% range'},
+  {id:'cfull',slot:'muzzle',name:'Full choke',short:'FULL',price:250,req:1,fits:[5],fx:{spread:.5,life:1.15},desc:'Tight shotgun pattern: hits further out'},
+  {id:'cwide',slot:'muzzle',name:'Spreader choke',short:'WIDE',price:200,req:1,fits:[5],fx:{spread:1.5,pel:2,dmg:.85},desc:'Wide shotgun pattern: +2 pellets, hard to miss up close'},
+  {id:'scope',slot:'optic',name:'Scope',short:'SCOPE',price:600,req:3,fits:[3,6],fx:{spread:.45,life:1.45,spd:1.15},desc:'Long range + pinpoint accuracy (range +45%)'},
+  {id:'laser',slot:'rail',name:'Laser sight',short:'LASER',price:350,req:1,fits:[3,4,5,6],fx:{spread:.7},desc:'Red laser shows exactly where you aim. Accuracy +30%'}];
+const ATT8_BY={};ATT8.forEach(a=>ATT8_BY[a.id]=a);const SLOTS8=['muzzle','optic','rail'],ATT8_CAP=4;
+function attOn8(wi){const a=I8().att[wi];return a&&typeof a==='object'?a:(I8().att[wi]={});}
+function attList8(wi){const a=attOn8(wi),r=[];for(const s of SLOTS8)if(a[s]&&ATT8_BY[a[s]])r.push(ATT8_BY[a[s]]);return r;}
+function attMounted8(id){let n=0;const A=I8().att;for(const k in A)for(const s of SLOTS8)if(A[k]&&A[k][s]===id)n++;return n;}
+function attFree8(id){return Math.max(0,(I8().own[id]|0)-attMounted8(id));}
+function attHas8(wi,id){const d=ATT8_BY[id];return !!d&&attOn8(wi)[d.slot]===id;}
+function attach8(wi,id,quiet){const d=ATT8_BY[id];if(!d||!d.fits.includes(wi))return false;if(attHas8(wi,id))return true;if(attFree8(id)<=0){if(!quiet)msg('NO FREE '+d.name.toUpperCase(),'#f88',1.4);return false;}
+  attOn8(wi)[d.slot]=id;if(!quiet){msg(d.name.toUpperCase()+' ON THE '+WEAPONS[wi].name,'#8cf',1.4);sfx('pick');}saveT=Math.min(saveT,2);return true;}
+function detach8(wi,id,quiet){const d=ATT8_BY[id];if(!d)return false;const a=attOn8(wi);if(a[d.slot]!==id)return false;a[d.slot]=null;if(!quiet){msg(d.name.toUpperCase()+' REMOVED','#ccc',1.2);sfx('door');}saveT=Math.min(saveT,2);return true;}
+function attTidy8(){const A=I8().att;for(const k in A){const wi=+k;if(!A[k])continue;for(const s of SLOTS8){const id=A[k][s];if(id&&(!ATT8_BY[id]||!ATT8_BY[id].fits.includes(wi)||!own8(wi)))A[k][s]=null;}}
+  for(const d of ATT8){const s=I8();while(attMounted8(d.id)>(s.own[d.id]|0)){for(const k in s.att)if(s.att[k]&&s.att[k][d.slot]===d.id){s.att[k][d.slot]=null;break;}}}}
+function attBuy8(id){const d=ATT8_BY[id],s=I8();if((s.own[id]|0)>=ATT8_CAP){msg('YOU HAVE ENOUGH OF THOSE','#f88',1.4);return;}
+  s.own[id]=(s.own[id]|0)+1;V8.stats.attBuy++;const p=player;const tryW=[p.wp,...d.fits].filter(w=>d.fits.includes(w)&&own8(w));
+  let on=null;for(const w of tryW)if(!attOn8(w)[d.slot]){attach8(w,id,true);on=w;break;}
+  msg(d.name.toUpperCase()+' BOUGHT'+(on!=null?' - FITTED TO THE '+WEAPONS[on].name:' - IN YOUR INVENTORY ('+KL('bag')+')'),'#8cf',2.2);}
+function attFx8(wi){const fx={dmg:1,spread:1,life:1,spd:1,pel:0,quiet:0,laser:0};for(const d of attList8(wi)){const f=d.fx;if(f.dmg)fx.dmg*=f.dmg;if(f.spread)fx.spread*=f.spread;if(f.life)fx.life*=f.life;if(f.spd)fx.spd*=f.spd;if(f.pel)fx.pel+=f.pel;if(f.quiet)fx.quiet=1;if(d.id==='laser')fx.laser=1;}return fx;}
+// ---------------------------------------------------------------- spare guns
+const SPARE8={3:{w:1.2,val:120,shop:90},4:{w:2.5,val:360,shop:270},5:{w:3.5,val:510,shop:380},6:{w:4.5,val:960,shop:720}},SPARE8_CAP=3,SPARE8_TOT=6;
+const PICK8={pistol:3,smg:4,shotgun:5,rifle:6};
+const spares8=wi=>player.inv.filter(x=>x.k==='gun'&&(wi==null||x.wi===wi));
+function addSpare8(wi,src){const S=SPARE8[wi];if(!S)return false;const nm=WEAPONS[wi].name;
+  if(spares8(wi).length>=SPARE8_CAP||spares8().length>=SPARE8_TOT){V8.stats.spareCap++;msg('SPARE '+nm+' LIMIT ('+SPARE8_CAP+') - TOOK THE AMMO','#fc8',1.6);return false;}
+  if(carryW()+S.w>carryCap()){V8.stats.spareCap++;msg('BAG FULL - LEFT THE SPARE '+nm+', TOOK THE AMMO','#fc8',1.8);return false;}
+  player.inv.push({name:'SPARE '+nm,k:'gun',wi,w:S.w,val:S.val,hotT:0});V8.stats.spares++;msg('SPARE '+nm+' IN YOUR BAG - SELL IT AT A GUN OR PAWN SHOP','#ffd23a',2.2);saveT=Math.min(saveT,2);return true;}
+function sellSpare8(wi){const it=spares8(wi)[0];if(!it)return;player.inv.splice(player.inv.indexOf(it),1);const v=SPARE8[wi].shop;addMoney(v);V8.stats.sold++;msg('SOLD SPARE '+WEAPONS[wi].name+' +$'+v,'#8f8',1.5);sfx('cash');saveT=Math.min(saveT,2);}
+updatePlayer=(o=>function(dt){const p=player;let snap=null;
+  if(pickups.length&&p.active){for(const k of pickups){const wi=PICK8[k.type];if(wi!=null&&Math.hypot(k.x-p.x,k.y-p.y)<30)(snap=snap||[]).push([k,wi,own8(wi)]);}}
+  const r=o.apply(this,arguments);
+  if(snap)for(const [k,wi,had] of snap)if(had&&!pickups.includes(k))addSpare8(wi,k.type);return r;})(updatePlayer);
+// ---------------------------------------------------------------- firing with attachments
+let SUP8=0;
+sevCopHears=(o=>function(x,y,r){return o(x,y,SUP8?Math.min(r||420,90):r);})(sevCopHears);
+copWitness=(o=>function(x,y){if(SUP8){for(const q of peds)if(q.cop&&!q.dead&&Math.hypot(q.x-x,q.y-y)<200&&los(q.x,q.y,x,y))return true;return false;}return o(x,y);})(copWitness);
+function supSfx8(x,y){if(!AC)return;const at=clamp(1-Math.hypot(x-focus.x,y-focus.y)/400,0,1);if(at<=0)return;try{sNoise(.05,900,.12*at,'bandpass');sTone(140,70,.04,.06*at);}catch(e){}}
+fire=(o=>function(x,y,a,wi,owner,ignore,dm,sm){if(owner!=='player'||interior)return o.apply(this,arguments);const w=WEAPONS[wi];if(!w||w.melee)return o.apply(this,arguments);
+  const fx=attFx8(wi);V8.stats.shots++;if(fx.dmg===1&&fx.spread===1&&fx.life===1&&fx.spd===1&&!fx.pel&&!fx.quiet)return o.apply(this,arguments);
+  const nb=bullets.length,P0=w.pellets,S0=w.snd;let saved=null;
+  if(fx.quiet){SUP8=1;V8.stats.supShots++;saved=[];for(const q of peds){if(q.dead)continue;const d=Math.hypot(q.x-x,q.y-y);if(d<270&&d>=70)saved.push([q,q.state,q.fx,q.fy,q.t]);}}
+  try{w.pellets=P0+fx.pel;if(fx.quiet)w.snd='_sup8';o.call(this,x,y,a,wi,owner,ignore,(dm||1)*fx.dmg,(sm===undefined?1:sm)*fx.spread);}
+  finally{w.pellets=P0;w.snd=S0;SUP8=0;}
+  for(let i=nb;i<bullets.length;i++){const b=bullets[i];if(b.owner!=='player')continue;b.life*=fx.life;b.vx*=fx.spd;b.vy*=fx.spd;if(fx.quiet){b._st=1;b._dn=1;b.sup8=1;}}
+  if(fx.quiet){for(const [q,s,fx_,fy,t] of saved){q.state=s;q.fx=fx_;q.fy=fy;q.t=t;}supSfx8(x,y);try{stMakeNoise(.22);}catch(e){}}})(fire);
+// sevGun's witness flag comes from the 260px flee loop; for suppressed shots only people right next to you count
+sevGun=(o=>function(witness,x,y){if(SUP8){let w=false;for(const q of peds)if(!q.dead&&!q.cop&&Math.hypot(q.x-x,q.y-y)<70){w=true;break;}return o(w,x,y);}return o(witness,x,y);})(sevGun);
+// ---------------------------------------------------------------- laser sight (world, drawn after lighting so it glows at night)
+const LZ8={x:0,y:0,on:false,hit:null};
+function laserCalc8(){LZ8.on=false;const p=player;if(state!=='play'||interior||!p.active||p.inCar||p.swim||p.hp<=0||F6)return;const wi=p.wp,w=WEAPONS[wi];if(!w||w.melee||!(p.ammo[wi]>0)||!attHas8(wi,'laser'))return;
+  const fx=attFx8(wi),R_=Math.min(520,w.spd*.7*fx.life*fx.spd),ca=Math.cos(p.a),sa=Math.sin(p.a),x0=p.x+ca*9,y0=p.y+sa*9;let d=0,hit=null;
+  for(d=6;d<R_;d+=5){const x=x0+ca*d,y=y0+sa*d;if(tileW(x,y)===BLD)break;let h=null;for(const q of peds){if(q.dead||Math.abs(q.x-x)>7||Math.abs(q.y-y)>7)continue;if(Math.hypot(q.x-x,q.y-y)<6){h=q;break;}}
+    if(!h)for(const c of cars){if(c.wreck||Math.abs(c.x-x)>30||Math.abs(c.y-y)>30)continue;const dx=x-c.x,dy=y-c.y,lx=dx*Math.cos(c.a)+dy*Math.sin(c.a),ly=-dx*Math.sin(c.a)+dy*Math.cos(c.a);if(Math.abs(lx)<(c.L||30)/2&&Math.abs(ly)<(c.Wd||c.W||14)/2){h=c;break;}}
+    if(h){hit=h;break;}}
+  LZ8.on=true;LZ8.x0=x0;LZ8.y0=y0;LZ8.x=x0+ca*d;LZ8.y=y0+sa*d;LZ8.hit=hit;}
+function laserDraw8(){laserCalc8();if(!LZ8.on)return;V8.stats.laserFrames++;const a=Pj(LZ8.x0,LZ8.y0,.02),b=Pj(LZ8.x,LZ8.y,.02);g.save();g.globalCompositeOperation='lighter';
+  g.strokeStyle='rgba(255,30,30,.22)';g.lineWidth=2.4;g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(b[0],b[1]);g.stroke();g.strokeStyle='rgba(255,60,60,.85)';g.lineWidth=.9;g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(b[0],b[1]);g.stroke();
+  const pul=.7+.3*Math.sin(gtime*18);g.fillStyle='rgba(255,40,40,'+(.35*pul)+')';g.beginPath();g.arc(b[0],b[1],LZ8.hit?3.2:2.4,0,TAU);g.fill();g.fillStyle='#ff6060';g.fillRect(b[0]-1,b[1]-1,2,2);g.restore();}
+dnLight=(o=>function(){o.apply(this,arguments);try{laserDraw8();}catch(e){if(!V8.err)V8.err='laser:'+e;}})(dnLight);
+// ---------------------------------------------------------------- fishing gear (adds to the angler perk levels; perks/skill points stay as they were)
+const FG8=[
+  {id:'rod0',slot:'rod',name:'Starter rod',tier:0,price:0,fx:{},col:'#5a3a1c',desc:'The old rod you started with'},
+  {id:'rod1',slot:'rod',name:'Fiberglass rod',tier:1,price:350,lv:1,fx:{cast:1,bite:.08},col:'#e0c040',desc:'Longer casts, bites 8% faster'},
+  {id:'rod2',slot:'rod',name:'Graphite rod',tier:2,price:1000,lv:3,fx:{cast:1,steady:1,bite:.12},col:'#3090e0',desc:'Long cast + steadier fights, bites 12% faster'},
+  {id:'rod3',slot:'rod',name:'Carbon pro rod',tier:3,price:2600,lv:5,fx:{cast:2,steady:1,luck:1,bite:.16},col:'#e03050',desc:'Pro rod: much longer casts, bigger + rarer fish, bites 16% faster'},
+  {id:'reel0',slot:'reel',name:'Spinning reel',tier:0,price:0,fx:{},desc:'Basic reel'},
+  {id:'reel1',slot:'reel',name:'Smooth-drag reel',tier:1,price:450,lv:2,fx:{braid:1},desc:'Less line strain: fewer snapped lines'},
+  {id:'reel2',slot:'reel',name:'Big-game reel',tier:2,price:1400,lv:4,fx:{braid:1,steady:1,reflex:1},desc:'Less strain, bigger catch zone, longer bite window'},
+  {id:'line0',slot:'line',name:'Mono line',tier:0,price:0,fx:{},desc:'Basic line'},
+  {id:'line1',slot:'line',name:'Fluorocarbon line',tier:1,price:200,lv:1,fx:{bite:.1},desc:'Fish can\'t see it: bites 10% faster'},
+  {id:'line2',slot:'line',name:'Braided PE line',tier:2,price:650,lv:3,fx:{braid:2},desc:'Very strong: line strain -40%, rarely snaps'},
+  {id:'cooler0',slot:'cooler',name:'Small cooler',tier:0,price:0,fx:{},desc:'Holds your catch'},
+  {id:'cooler1',slot:'cooler',name:'Big cooler',tier:1,price:350,lv:1,fx:{cooler:1},desc:'+4 cooler slots'},
+  {id:'cooler2',slot:'cooler',name:'Marine cooler',tier:2,price:1000,lv:3,fx:{cooler:2},desc:'+8 cooler slots'},
+  {id:'box',slot:'box',name:'Tackle box',tier:1,price:450,lv:2,fx:{luck:1},desc:'Organized lures: less junk, rarer fish'}];
+const FG8_BY={};FG8.forEach(f=>FG8_BY[f.id]=f);const FG8_SLOTS=['rod','reel','line','cooler'],PK8_CAP={steady:5,braid:4,reflex:5,cast:5,luck:4,cooler:6};
+const gearOwn8=id=>{const f=FG8_BY[id];return !!f&&(f.tier===0&&f.slot!=='box'||!!I8().gear[id]);};
+function gearOn8(){const s=I8(),r=FG8_SLOTS.map(k=>FG8_BY[s.eq[k]]).filter(Boolean);if(s.gear.box)r.push(FG8_BY.box);return r;}
+function gearBonus8(k){let n=0;for(const f of gearOn8())n+=f.fx[k]||0;return n;}
+let PKRAW8=0;
+PK=(o=>function(id){const r=o(id);if(PKRAW8||!PK8_CAP[id])return r;const b=gearBonus8(id);return b?Math.min(PK8_CAP[id],r+b):r;})(PK);
+perkWhy6=(o=>function(){PKRAW8++;try{return o.apply(this,arguments);}finally{PKRAW8--;}})(perkWhy6);
+perkBuy6=(o=>function(){PKRAW8++;try{return o.apply(this,arguments);}finally{PKRAW8--;}})(perkBuy6);
+v6PerksView=(o=>function(){PKRAW8++;try{return o.apply(this,arguments);}finally{PKRAW8--;}})(v6PerksView);
+v6Wait=(o=>function(F){const b=Math.min(.35,gearBonus8('bite'));return o.apply(this,arguments)*(1-b);})(v6Wait);
+function gearEquip8(id,quiet){const f=FG8_BY[id];if(!f||!gearOwn8(id)||f.slot==='box')return false;I8().eq[f.slot]=id;if(!quiet){msg(f.name.toUpperCase()+' EQUIPPED','#7df',1.4);sfx('pick');}saveT=Math.min(saveT,2);return true;}
+function gearBuy8(id){const f=FG8_BY[id];if(!f)return;const s=I8();s.gear[id]=true;V8.stats.gearBuy++;
+  if(f.slot!=='box'){const cur=FG8_BY[s.eq[f.slot]];if(!cur||cur.tier<f.tier)s.eq[f.slot]=id;}msg(f.name.toUpperCase()+(f.slot==='box'?'':' EQUIPPED')+': '+f.desc.toUpperCase(),'#7df',2.4);}
+const rodCol8=()=>{const r=FG8_BY[I8().eq.rod];return r?r.col:'#5a3a1c';};
+function gearItems8(hdr){const it=[],L=FL();
+  for(const sl of['rod','reel','line','cooler','box']){const fs=FG8.filter(f=>f.slot===sl&&(f.tier>0));if(hdr)it.push({label:'\u2014 '+({rod:'RODS',reel:'REELS',line:'FISHING LINE',cooler:'COOLERS',box:'TACKLE'})[sl]+' \u2014',dis:true,why:'BETTER GEAR = FASTER BITES, RARER FISH, FEWER SNAPPED LINES'});
+    for(const f of fs){const own=gearOwn8(f.id),eq=I8().eq[f.slot]===f.id||(f.slot==='box'&&own),lvOk=L.lvl>=(f.lv||1);
+      if(own)it.push({label:f.name,right:eq?'EQUIPPED':'OWNED',note:f.desc+(eq?'':'  (ENTER: equip)'),dis:eq,why:'ALREADY IN USE',act:()=>gearEquip8(f.id)});
+      else it.push({label:f.name,price:f.price,note:f.desc+(f.lv>1?'  (angler LV '+f.lv+'+)':''),dis:!lvOk,why:'NEEDS ANGLER LEVEL '+f.lv+' (CATCH MORE FISH)',act:buy(f.price,()=>gearBuy8(f.id))});}}
+  return it;}
+function tackleItems8(q){const L=FL(),it=[];
+  it.push({label:'Live shrimp x10',price:25,note:'Bites come ~40% faster. Have '+L.bait.shrimp,act:buy(25,()=>{L.bait.shrimp+=10;msg('LIVE SHRIMP x10','#8cf',1.2);})});
+  it.push({label:'Pro lures x10',price:60,note:'Bigger fish, less junk. Have '+L.bait.lure,act:buy(60,()=>{L.bait.lure+=10;msg('PRO LURES x10','#8cf',1.2);})});
+  it.push(...gearItems8(true));
+  const s=v6SellItems(1.05,true,true);if(s.length)it.push({label:'\u2014 SELL YOUR CATCH \u2014',dis:true,why:'PICK AN ITEM BELOW'},...s);
+  it.push({label:'Leave counter',act:closeMenu});return it;}
+// the old marina kiosk also sells the new gear (inserted after its bait)
+openBait6=(o=>function(){const om=openMenu;let cfg=null;openMenu=c=>{cfg=c;};try{o.apply(this,arguments);}finally{openMenu=om;}if(!cfg)return;
+  const it=cfg.items.slice(),ix=Math.min(2,it.length);it.splice(ix,0,...gearItems8(true));cfg.items=it;cfg.reopen=()=>openBait6();openMenu(cfg);})(openBait6);
+// ---------------------------------------------------------------- shops
+shopItems=(o=>function(q){if(q.type==='tackle')return tackleItems8(q);const it=o.apply(this,arguments);if(q.type!=='gun')return it;
+  const L=level(),add=[],p=player;add.push({label:'\u2014 ATTACHMENTS \u2014',dis:true,why:'FITTED TO YOUR GUN RIGHT AWAY. SWAP THEM IN THE INVENTORY ('+KL('bag')+')'});
+  for(const d of ATT8){const n=I8().own[d.id]|0,fits=d.fits.map(i=>WEAPONS[i].name).join(', ');
+    add.push({label:d.name+(n?'  (have '+n+')':''),price:d.price,req:d.req,note:d.desc+'.  Fits: '+fits,dis:L<d.req||n>=ATT8_CAP,why:n>=ATT8_CAP?'YOU HAVE ENOUGH OF THOSE':'REQUIRES REP LEVEL '+d.req,act:buy(d.price,()=>attBuy8(d.id),d.req)});}
+  const sp=[3,4,5,6].filter(wi=>spares8(wi).length);if(sp.length){add.push({label:'\u2014 SELL SPARE GUNS \u2014',dis:true,why:'SPARES COME FROM PICKING UP GUNS YOU ALREADY OWN'});
+    for(const wi of sp)add.push({label:'Sell spare '+WEAPONS[wi].name+'  (x'+spares8(wi).length+')',right:'+$'+SPARE8[wi].shop,note:'The counter pays $'+SPARE8[wi].shop+' each, no questions asked',act:()=>sellSpare8(wi)});}
+  const li=it.findIndex(x=>x.label==='Leave counter');it.splice(li<0?it.length:li,0,...add);return it;})(shopItems);
+// ---------------------------------------------------------------- inventory screen
+const INV8={open:false,tab:0,sel:0,scroll:0,rects:[],rowsCache:null,drag:null,from:null,flash:0};
+const TABS8=[['weapons','WEAPONS','GUNS'],['att','ATTACHMENTS','MODS'],['tools','TOOLS','TOOLS'],['cloth','CLOTHING','CLOTHES'],['fish','FISHING','FISHING'],['items','ITEMS / LOOT','LOOT']];
+function openInv8(tab){if(state!=='play'&&state!=='pause')return;if(menu)closeMenu();phone.open=false;attTidy8();INV8.open=true;INV8.from=state;if(tab!=null){INV8.tab=tab;INV8.sel=0;INV8.scroll=0;}V8.stats.opens++;sfx('phone');}
+function closeInv8(){INV8.open=false;sfx('phone');mouse.down=false;saveT=Math.min(saveT,2);}
+const wName8=i=>WEAPONS[i].name;
+function clothName8(k,t){const c=CLOTH_CATS.find(c=>c.k===k);const s=c&&c.styles.find(s=>s.t===t);return s?s.name:(t||'none');}
+function wardSlot8(k){const r=[];for(const w of wardrobe){const [kk,t,c]=w.split(':');if(kk===k&&t&&t!=='null')r.push({t,c});}return r;}
+function gps8(type,label){gps={type,label};closeInv8();msg('GPS: '+label.toUpperCase(),'#9cf',1.5);}
+function rows8(){const p=player,tab=TABS8[INV8.tab][0],R_=[];
+  if(tab==='weapons'){for(let i=0;i<WEAPONS.length;i++){if(!own8(i))continue;const w=WEAPONS[i],eq=p.wp===i,at=attList8(i),acts=[];
+      if(!eq)acts.push({l:'EQUIP',fn:()=>{p.wp=i;msg(w.name,'#ff8',1);sfx('pick');}});
+      if(!w.melee)for(const d of ATT8){if(!d.fits.includes(i))continue;if(attHas8(i,d.id))acts.push({l:'REMOVE '+d.short,fn:()=>detach8(i,d.id)});else if(attFree8(d.id)>0)acts.push({l:'ATTACH '+d.short,fn:()=>attach8(i,d.id)});}
+      R_.push({ic:['gun',i],name:w.name,sub:w.melee?'Melee'+(i===0?'':'  -  always with you'):'AMMO '+p.ammo[i]+(at.length?'   +  '+at.map(d=>d.name).join(', '):'   -  no attachments'),
+        right:eq?'EQUIPPED':'',rcol:'#40e070',acts,info:w.melee?'Melee weapon.':'Damage '+w.dmg+(w.pellets>1?' x'+w.pellets:'')+'   Fire rate '+(1/w.rate).toFixed(1)+'/s'+(at.length?'   Mods: '+at.map(d=>d.desc.split(':')[0]).join(' / '):'   Buy attachments at gun shops')});}
+    for(const wi of[3,4,5,6]){const n=spares8(wi).length;if(!n)continue;const S=SPARE8[wi];
+      R_.push({ic:['gun',wi,1],name:'SPARE '+wName8(wi)+'  x'+n,sub:'Sell: $'+S.shop+' each at gun shops, pawn shops pay too  -  '+S.w+' kg',right:'SELL',rcol:'#ffd23a',
+        acts:[{l:'GPS GUN SHOP',fn:()=>gps8('gun','Gun Shop')},{l:'GPS PAWN SHOP',fn:()=>gps8('pawn','Pawn Shop')},{l:'DROP ONE',fn:()=>{const it=spares8(wi)[0];if(it){p.inv.splice(p.inv.indexOf(it),1);msg('DROPPED A SPARE '+wName8(wi),'#ccc',1.2);}}}],
+        info:'Picked up a '+wName8(wi)+' you already had: you kept the ammo AND the gun. Max '+SPARE8_CAP+' per type, '+SPARE8_TOT+' total.'});}}
+  else if(tab==='att'){for(const d of ATT8){const n=I8().own[d.id]|0,fr=attFree8(d.id),on=Object.keys(I8().att).filter(k=>attHas8(+k,d.id)).map(k=>wName8(+k));const acts=[];
+      for(const wi of d.fits){if(!own8(wi))continue;if(attHas8(wi,d.id))acts.push({l:'OFF '+wName8(wi),fn:()=>detach8(wi,d.id)});else if(fr>0)acts.push({l:'ON '+wName8(wi),fn:()=>attach8(wi,d.id)});}
+      R_.push({ic:['att',d.id],name:d.name+(n?'  x'+n:''),dim:!n,sub:n?(on.length?'On: '+on.join(', '):'Not fitted')+(fr?'   ('+fr+' spare)':''):'Not owned  -  $'+d.price+' at gun shops'+(d.req>1?' (rep LV '+d.req+')':''),
+        right:n?(on.length?'FITTED':'IN BAG'):'',rcol:on.length?'#40e070':'#ccc',acts:n?acts:[{l:'GPS GUN SHOP',fn:()=>gps8('gun','Gun Shop')}],info:d.desc+'.  Fits: '+d.fits.map(wName8).join(', ')});}}
+  else if(tab==='tools'){const T_=[['slimjim','Slim Jim','Quiet car lock picks','pawn'],['lockpick','Lockpick set','Cars + houses, 2x faster','pawn'],['bypass','Electronic bypass','Near-silent entry, kills house alarms','pawn'],
+      ['cutter','Glass cutter','Cut glass instead of kicking doors','pawn'],['bag','Duffel bag','+6 kg carrying capacity','pawn']];
+    for(const [k,n,d,shop] of T_){const has=!!tools[k];R_.push({ic:['tool',k],name:n,dim:!has,sub:has?d:'Not owned  -  pawn shops',right:has?'OWNED':'',rcol:'#40e070',acts:has?[]:[{l:'GPS PAWN SHOP',fn:()=>gps8('pawn','Pawn Shop')}],info:d});}
+    R_.push({ic:['tool','armor'],name:'Body armor',sub:p.armor>0?'Armor '+Math.round(p.armor)+' / 100':'None  -  gun shops sell armor',right:p.armor>0?Math.round(p.armor)+'':'',rcol:'#8cf',dim:!(p.armor>0),acts:[],info:'Soaks up damage before your health.'});
+    R_.push({ic:['tool','phone'],name:'Phone',sub:'GPS, bank, jobs, fishing log  ('+KL('phone')+')',right:'',acts:[{l:'OPEN PHONE',fn:()=>{closeInv8();openPhone('home');}}],info:'Your phone.'});}
+  else if(tab==='cloth'){for(const c of CLOTH_CATS){const k=c.k,cur=p.outfit[k],own=wardSlot8(k),acts=[];
+      if(k!=='hair'&&own.length>(cur?1:0)){acts.push({l:'NEXT \u25b6',fn:()=>{const L_=wardSlot8(k);let ix=cur?L_.findIndex(x=>x.t===cur.t&&x.c===cur.c):-1;const n=L_[(ix+1)%L_.length];if(n)wear(k,n.t,n.c);}});}
+      if((k==='hat'||k==='glasses')&&cur)acts.push({l:'TAKE OFF',fn:()=>wear(k,null,null)});
+      acts.push({l:'WARDROBE',fn:()=>{closeInv8();openClothing({name:'WARDROBE',type:'clothing'},true);}});
+      R_.push({ic:['cloth',k,cur&&cur.c],name:c.name.replace(' (HAIR)','')+':  '+(cur?clothName8(k,cur.t):'none'),sub:k==='hair'?'Change at a salon (clothing store)':'You own '+own.length+' '+c.name.toLowerCase(),right:cur?'WEARING':'',rcol:'#c8f',acts,info:'A new look in a store sheds a wanted star.'});}}
+  else if(tab==='fish'){const L=FL(),s=I8();
+    for(const sl of FG8_SLOTS){const f=FG8_BY[s.eq[sl]],ow=FG8.filter(x=>x.slot===sl&&gearOwn8(x.id)),acts=[];if(ow.length>1)acts.push({l:'NEXT \u25b6',fn:()=>{const ix=ow.indexOf(f);gearEquip8(ow[(ix+1)%ow.length].id);}});
+      acts.push({l:'GPS TACKLE SHOP',fn:()=>gps8('tackle','Bait & Tackle shop')});
+      R_.push({ic:['fish',sl,f&&f.tier],name:({rod:'ROD',reel:'REEL',line:'LINE',cooler:'COOLER'})[sl]+':  '+(f?f.name:'-'),sub:(f?f.desc:'')+(sl==='cooler'?'   ('+cool6()+' slots)':'')+'   -  own '+ow.length+'/'+FG8.filter(x=>x.slot===sl).length,right:f&&f.tier?'TIER '+f.tier:'BASIC',rcol:f&&f.tier?'#7df':'#999',acts,info:'Better gear at Bait & Tackle shops on the coast.'});}
+    R_.push({ic:['fish','box'],name:'Tackle box',dim:!s.gear.box,sub:s.gear.box?FG8_BY.box.desc:'Not owned  -  $'+FG8_BY.box.price+' at Bait & Tackle',right:s.gear.box?'OWNED':'',rcol:'#7df',acts:[{l:'GPS TACKLE SHOP',fn:()=>gps8('tackle','Bait & Tackle shop')}],info:FG8_BY.box.desc});
+    R_.push({ic:['fish','bait'],name:'Bait:  '+L.bait.shrimp+' shrimp,  '+L.bait.lure+' lures',sub:'Shrimp = faster bites.  Lures = bigger fish, less junk',right:'',acts:[],info:'Buy bait at any Bait & Tackle.'});
+    const fish=p.inv.filter(x=>x.k==='fish');R_.push({ic:['fish','fish'],name:'Catch in cooler:  '+fish.length+' / '+cool6(),sub:fish.length?fish.slice(0,4).map(x=>x.name).join(', ')+(fish.length>4?' ...':'')+'   ~$'+fish.reduce((a,x)=>a+(x.val|0),0):'Nothing yet - go fishing!',right:'',acts:[{l:'FISHING LOG',fn:()=>{closeInv8();openPhone('fish');}}],info:'Sell fish at seafood restaurants or Bait & Tackle shops.'});
+    R_.push({ic:['fish','lvl'],name:'Angler level '+L.lvl,sub:'Perk points: '+L.pp+'   (Phone > Fishing > Perks)',right:'',acts:[],info:'Gear stacks on top of your perks.'});}
+  else{R_.push({ic:['cash'],name:'Cash $'+p.money+'   Bank $'+bank,sub:'Bag '+carryW().toFixed(1)+' / '+carryCap()+' kg',right:'',acts:[],info:'Wallet cash is lost when WASTED. Bank it at ATMs.'});
+    const items=p.inv.filter(x=>x.k!=='fish'&&x.k!=='gun');
+    for(const x of items)R_.push({ic:['loot',x.name],name:x.name,sub:x.w+' kg   worth ~$'+x.val+(x.hotT>0?'   HOT (stolen - pawn pays less)':''),right:x.hotT>0?'HOT':'',rcol:'#f66',
+      acts:[{l:'GPS PAWN SHOP',fn:()=>gps8('pawn','Pawn Shop')},{l:'DROP',fn:()=>{const i=p.inv.indexOf(x);if(i>=0)p.inv.splice(i,1);msg('DROPPED '+x.name.toUpperCase(),'#ccc',1.2);}}],info:'Sell stolen goods at pawn shops. Stash them at your safehouse.'});
+    if(!items.length)R_.push({ic:['loot','none'],name:'(no loot)',sub:'Steal from houses, cars and shops',dim:true,acts:[],info:''});}
+  return R_;}
+// ---- drawing
+function sc8(){const D=DPRS,ts=clamp(TXS?TXS():1,.85,1.4);if(TOUCHUI)return D*clamp(Math.min(W,H)/D/620,1,1.35)*ts;return Math.max(1,U)*ts;}
+function icon8(ic,x,y,s){const c=ctx;c.save();c.translate(x+s/2,y+s/2);const k=s/40;c.scale(k,k);c.lineJoin='round';c.lineCap='round';
+  const R=(x,y,w,h,col)=>{c.fillStyle=col;c.fillRect(x,y,w,h);};const t=ic[0];
+  if(t==='gun'){const i=ic[1];c.rotate(-.12);
+    if(i===0){c.fillStyle='#e0b090';c.beginPath();c.arc(0,2,11,0,TAU);c.fill();R(-11,-9,22,7,'#d09a78');}
+    else if(i===1){c.rotate(-.6);R(-16,-2.5,32,5,'#b07a40');R(-18,-3.5,8,7,'#7a4a20');}
+    else if(i===2){c.rotate(-.6);R(-2,-3,18,6,'#d8d8e0');R(-14,-3.5,12,7,'#4a3020');}
+    else if(i===3){R(-12,-6,22,7,'#a8acb8');R(-12,1,7,11,'#8a8e9a');R(8,-5,3,2,'#c8ccd8');}
+    else if(i===4){R(-14,-5,26,8,'#9a9eaa');R(-4,3,5,13,'#7a7e8a');R(-14,3,5,7,'#8a8e9a');}
+    else if(i===5){R(-18,-4,34,5,'#a0a4b0');R(-18,1,12,7,'#6a4a2a');R(2,1,8,3,'#5a3a1a');}
+    else{R(-19,-4,38,5,'#9a9eaa');R(-19,1,12,7,'#8a7a5a');R(-2,1,4,9,'#8a8e9a');R(-6,-9,12,4,'#c8ccd8');}
+    if(ic[2]){c.rotate(.12);c.fillStyle='#ffd23a';c.font='bold 13px '+FONT;c.textAlign='center';c.textBaseline='middle';c.fillText('$',13,12);}
+    if(i>=3&&!ic[2]){const at=attList8(i);for(const d of at){if(d.id==='laser'){c.fillStyle='#f33';c.fillRect(-2,-9,9,3);}else if(d.id==='sup'){c.fillStyle='#777';c.fillRect(i===6?19:i===4?12:10,-5.5,10,5);}else if(d.id==='scope'){c.fillStyle='#4a6a8a';c.fillRect(-6,-13,14,4);}else{c.fillStyle='#c90';c.fillRect(16,-4.5,4,6);}}}}
+  else if(t==='att'){const id=ic[1];
+    if(id==='sup'){R(-16,-5,32,10,'#6a6a70');R(-16,-5,32,3,'#9a9aa0');R(12,-5,4,10,'#444');}
+    else if(id==='scope'){R(-14,-5,28,10,'#3a5a7a');c.fillStyle='#8cf';c.beginPath();c.arc(14,0,6,0,TAU);c.fill();R(-4,5,8,5,'#222');}
+    else if(id==='laser'){R(-12,-5,16,10,'#333');c.strokeStyle='#f33';c.lineWidth=2;c.beginPath();c.moveTo(4,0);c.lineTo(18,0);c.stroke();c.fillStyle='#f66';c.beginPath();c.arc(18,0,3,0,TAU);c.fill();}
+    else{R(-8,-7,16,14,id==='cfull'?'#c90':'#a64');c.fillStyle='#222';c.beginPath();c.arc(0,0,id==='cfull'?2.5:5,0,TAU);c.fill();}}
+  else if(t==='tool'){const k=ic[1];c.strokeStyle='#ddd';c.fillStyle='#ddd';c.lineWidth=3;
+    if(k==='bag'){R(-14,-6,28,16,'#6a5030');R(-6,-11,12,5,'#4a3020');}
+    else if(k==='armor'){c.fillStyle='#4a6a9a';c.beginPath();c.moveTo(-12,-12);c.lineTo(12,-12);c.lineTo(14,6);c.lineTo(0,14);c.lineTo(-14,6);c.closePath();c.fill();}
+    else if(k==='phone'){R(-8,-14,16,28,'#222');R(-6,-11,12,19,'#3a8ad0');}
+    else if(k==='cutter'){c.beginPath();c.moveTo(-12,10);c.lineTo(10,-12);c.stroke();c.fillStyle='#8cf';c.beginPath();c.arc(10,-12,4,0,TAU);c.fill();}
+    else if(k==='bypass'){R(-12,-8,24,16,'#2a2a2a');R(-8,-4,8,8,'#3c3');R(4,-4,4,4,'#f33');}
+    else{c.beginPath();c.moveTo(-14,8);c.lineTo(10,-8);c.lineTo(14,-4);c.stroke();R(-16,6,8,6,'#a64');}}
+  else if(t==='cloth'){const col=ic[2]||'#555';c.fillStyle=col;const k=ic[1];
+    if(k==='top'){c.beginPath();c.moveTo(-14,-10);c.lineTo(-6,-14);c.lineTo(6,-14);c.lineTo(14,-10);c.lineTo(10,-4);c.lineTo(8,14);c.lineTo(-8,14);c.lineTo(-10,-4);c.closePath();c.fill();}
+    else if(k==='pants'){c.fillRect(-10,-14,20,8);c.fillRect(-10,-6,8,20);c.fillRect(2,-6,8,20);}
+    else if(k==='shoes'){c.fillRect(-14,2,14,8);c.fillRect(2,2,14,8);c.fillRect(-12,-4,8,8);c.fillRect(4,-4,8,8);}
+    else if(k==='hat'){c.beginPath();c.arc(0,4,12,PI,0);c.fill();c.fillRect(-18,3,30,4);}
+    else if(k==='glasses'){c.fillRect(-15,-4,12,8);c.fillRect(3,-4,12,8);c.fillRect(-3,-3,6,2);}
+    else{c.beginPath();c.arc(0,2,12,PI*1.05,-.05);c.fill();c.fillRect(-12,0,5,10);c.fillRect(7,0,5,10);}
+    c.strokeStyle='rgba(0,0,0,.6)';c.lineWidth=1.5;c.strokeRect(-17,-17,34,34);}
+  else if(t==='fish'){const k=ic[1],tier=ic[2]|0,tc=['#8a6a3a','#e0c040','#3090e0','#e03050'][tier]||'#8a6a3a';
+    if(k==='rod'){c.strokeStyle=tc;c.lineWidth=3;c.beginPath();c.moveTo(-16,14);c.lineTo(16,-14);c.stroke();c.strokeStyle='#ddd';c.lineWidth=1;c.beginPath();c.moveTo(16,-14);c.lineTo(16,10);c.stroke();R(-12,6,6,6,'#333');}
+    else if(k==='reel'){c.fillStyle=tc;c.beginPath();c.arc(0,0,12,0,TAU);c.fill();c.fillStyle='#222';c.beginPath();c.arc(0,0,4,0,TAU);c.fill();R(8,-2,10,4,'#aaa');}
+    else if(k==='line'){c.strokeStyle=tc;c.lineWidth=2;for(let r=4;r<14;r+=3){c.beginPath();c.arc(0,0,r,0,TAU);c.stroke();}}
+    else if(k==='cooler'){R(-15,-8,30,20,tier?'#2a8ae0':'#d03030');R(-15,-12,30,5,'#eee');R(-5,-15,10,4,'#ccc');}
+    else if(k==='box'){R(-15,-8,30,18,'#2a8a5a');R(-15,-8,30,5,'#3aa070');R(-3,-12,6,5,'#ddd');}
+    else if(k==='bait'){c.fillStyle='#f8a080';c.beginPath();c.ellipse(-4,0,10,5,.3,0,TAU);c.fill();c.fillStyle='#ffd23a';c.beginPath();c.arc(10,-4,4,0,TAU);c.fill();}
+    else if(k==='lvl'){c.fillStyle='#ffd23a';c.font='bold 22px '+FONT;c.textAlign='center';c.textBaseline='middle';c.fillText('\u2605',0,1);}
+    else{c.fillStyle='#60b0d0';c.beginPath();c.ellipse(-2,0,12,7,0,0,TAU);c.fill();c.beginPath();c.moveTo(8,0);c.lineTo(17,-8);c.lineTo(17,8);c.closePath();c.fill();R(-9,-2,3,3,'#000');}}
+  else if(t==='cash'){R(-16,-9,32,18,'#2a8a3a');c.fillStyle='#bfb';c.font='bold 16px '+FONT;c.textAlign='center';c.textBaseline='middle';c.fillText('$',0,1);}
+  else{R(-12,-10,24,20,'#9a7a4a');R(-12,-10,24,5,'#b89a6a');R(-2,-10,4,20,'#6a4a2a');}
+  c.restore();}
+function btn8(x,y,w,h,l,col,fn,s,hot){const c=ctx;c.fillStyle=hot?'rgba(255,210,58,.28)':'rgba(255,255,255,.1)';uiRRect(c,x,y,w,h,8*s);c.fill();c.strokeStyle=col||'#888';c.lineWidth=2*s;c.stroke();
+  c.textAlign='center';c.textBaseline='middle';c.font='bold '+Math.round(15*s)+'px '+FONT;fitText(l,w-10*s);c.fillStyle='#fff';c.fillText(l,x+w/2,y+h/2+1);INV8.rects.push({x,y,w,h,fn});}
+function drawInv8(){const s=sc8(),c=ctx,P=TOUCHUI?10*DPRS:14*s,x0=P,y0=P,w=W-2*P,h=H-2*P,acc='#ffd23a';INV8.rects=[];
+  c.save();c.textBaseline='top';c.lineJoin='round';c.fillStyle='rgba(0,0,0,.6)';c.fillRect(0,0,W,H);
+  c.fillStyle='rgba(12,14,22,.96)';uiRRect(c,x0,y0,w,h,14*s);c.fill();c.strokeStyle=acc;c.lineWidth=3*s;c.stroke();
+  // header
+  const hh=52*s;c.textAlign='left';c.font='bold '+Math.round(28*s)+'px '+FONT;outline('INVENTORY',x0+16*s,y0+12*s,acc,4*s);
+  const cb=44*s;btn8(x0+w-cb-10*s,y0+6*s,cb,cb,'\u2715','#f88',closeInv8,s);
+  c.textAlign='right';c.textBaseline='top';c.font='bold '+Math.round(15*s)+'px '+FONT;const hdr='$'+player.money+'    BAG '+carryW().toFixed(1)+'/'+carryCap()+' kg';
+  const hx=x0+w-cb-22*s;fitText(hdr,w*.45);outline(hdr,hx,y0+18*s,'#ddd',3*s);
+  // tabs
+  const ty=y0+hh+6*s,th=48*s,tw=(w-20*s)/TABS8.length,shortL=tw<150*s;
+  TABS8.forEach((t,i)=>{const tx=x0+10*s+i*tw,on=i===INV8.tab;c.fillStyle=on?'rgba(255,210,58,.22)':'rgba(255,255,255,.06)';uiRRect(c,tx+2*s,ty,tw-4*s,th,8*s);c.fill();
+    if(on){c.strokeStyle=acc;c.lineWidth=2.5*s;c.stroke();}c.textAlign='center';c.textBaseline='middle';c.font='bold '+Math.round(16*s)+'px '+FONT;const l=shortL?t[2]:t[1];fitText(l,tw-12*s);
+    c.fillStyle=on?acc:'#bbb';c.fillText(l,tx+tw/2,ty+th/2+1);INV8.rects.push({x:tx,y:ty,w:tw,h:th,fn:()=>{INV8.tab=i;INV8.sel=0;INV8.scroll=0;}});});
+  // action panel at the bottom
+  const rows=rows8();INV8.rowsCache=rows;if(INV8.sel>=rows.length)INV8.sel=Math.max(0,rows.length-1);const cur=rows[INV8.sel];
+  const bh=TOUCHUI?52*s:44*s,foot=TOUCHUI?0:22*s,ph=bh+62*s+foot,py=y0+h-ph-8*s;
+  c.fillStyle='rgba(255,255,255,.05)';c.fillRect(x0+10*s,py,w-20*s,ph);c.fillStyle=acc;c.fillRect(x0+10*s,py,w-20*s,2*s);
+  if(cur){c.textAlign='left';c.textBaseline='top';c.font='bold '+Math.round(17*s)+'px '+FONT;let nm=cur.name;fitText(nm,w-40*s);c.fillStyle='#fff';c.fillText(nm,x0+20*s,py+8*s);
+    c.font=Math.round(14*s)+'px '+FONT;fitText(cur.info||cur.sub||'',w-40*s);c.fillStyle='#bcd';c.fillText(cur.info||cur.sub||'',x0+20*s,py+33*s);
+    const acts=(cur.acts||[]).slice(0,4);let bx=x0+20*s;const bw=Math.min(240*s,(w-40*s-(acts.length-1)*10*s)/Math.max(1,acts.length));
+    acts.forEach((a,k)=>{btn8(bx,py+58*s,bw,bh,(TOUCHUI?'':(k+1)+'  ')+a.l,'#8cf',()=>{a.fn();INV8.flash=.25;},s,k===0);bx+=bw+10*s;});
+    if(!acts.length){c.font=Math.round(13*s)+'px '+FONT;c.fillStyle='#888';c.textAlign='left';c.textBaseline='middle';c.fillText('Nothing to do with this one.',x0+20*s,py+58*s+bh/2);}}
+  if(foot){c.textAlign='left';c.textBaseline='top';c.font=Math.round(12*s)+'px '+FONT;c.fillStyle='rgba(255,255,255,.55)';const ft='\u2190/\u2192 tabs    \u2191/\u2193 select    ENTER / 1-4: actions    '+KL('bag')+' / ESC: close    mouse: click, wheel scrolls';fitText(ft,w-40*s);c.fillText(ft,x0+20*s,py+ph-18*s);}
+  // list
+  const ly=ty+th+10*s,lh=py-ly-8*s,rh=(TOUCHUI?62:54)*s,vis=Math.max(1,Math.floor(lh/rh));
+  INV8.scroll=clamp(INV8.scroll,Math.max(0,INV8.sel-vis+1),Math.min(INV8.sel,Math.max(0,rows.length-vis)));INV8.scroll=clamp(INV8.scroll,0,Math.max(0,rows.length-vis));
+  INV8.list={x:x0+10*s,y:ly,w:w-20*s,h:lh,rh,vis,n:rows.length};
+  for(let j=0;j<vis;j++){const i=j+INV8.scroll,r=rows[i];if(!r)break;const ry=ly+j*rh,sel=i===INV8.sel,rx=x0+10*s,rw=w-20*s;
+    c.fillStyle=sel?'rgba(255,255,255,.14)':j%2?'rgba(255,255,255,.03)':'rgba(255,255,255,.0)';c.fillRect(rx,ry,rw,rh-4*s);if(sel){c.fillStyle=acc;c.fillRect(rx,ry,5*s,rh-4*s);}
+    const isz=rh-14*s;c.fillStyle='rgba(0,0,0,.35)';uiRRect(c,rx+12*s,ry+5*s,isz,isz,6*s);c.fill();c.globalAlpha=r.dim?.4:1;icon8(r.ic,rx+12*s,ry+5*s,isz);
+    const sb=rows.length>vis?60*s:0,tx=rx+22*s+isz,rw2=r.right?120*s:0;c.textAlign='left';c.textBaseline='top';c.font='bold '+Math.round(18*s)+'px '+FONT;let t1=r.name;fitText(t1,rw-(tx-rx)-rw2-14*s-sb);c.fillStyle=r.dim?'#999':sel?'#fff':'#e6e6e6';c.fillText(t1,tx,ry+6*s);
+    c.font=Math.round(14*s)+'px '+FONT;fitText(r.sub||'',rw-(tx-rx)-rw2-14*s-sb);c.fillStyle=r.dim?'#777':'#aab';c.fillText(r.sub||'',tx,ry+(TOUCHUI?32:30)*s);c.globalAlpha=1;
+    if(r.right){c.textAlign='right';c.font='bold '+Math.round(15*s)+'px '+FONT;fitText(r.right,rw2);c.fillStyle=r.rcol||'#ccc';c.fillText(r.right,rx+rw-14*s-sb,ry+(rh-4*s)/2-8*s);}
+    INV8.rects.push({x:rx,y:ry,w:rw,h:rh-4*s,fn:()=>{if(INV8.sel===i&&!TOUCHUI&&r.acts&&r.acts[0]){r.acts[0].fn();}INV8.sel=i;},row:1});}
+  if(rows.length>vis){c.textAlign='right';c.textBaseline='top';c.font='bold '+Math.round(14*s)+'px '+FONT;c.fillStyle='#ffd23a';
+    if(INV8.scroll>0)btn8(x0+w-64*s,ly,48*s,36*s,'\u25b2','#ffd23a',()=>{INV8.sel=Math.max(0,INV8.sel-vis);},s);
+    if(INV8.scroll+vis<rows.length)btn8(x0+w-64*s,ly+lh-40*s,48*s,36*s,'\u25bc','#ffd23a',()=>{INV8.sel=Math.min(rows.length-1,INV8.sel+vis);},s);}
+  c.restore();}
+function drawGearChip8(){if(!F6||interior||state!=='play')return;const s=Math.min(sc8(),1.3),on=gearOn8().filter(f=>f.tier>0);if(!on.length)return;
+  const t=on.filter(f=>f.slot!=='cooler').map(f=>f.name.toUpperCase()).join('  \u2022  ');ctx.save();ctx.font='bold '+Math.round(13*s)+'px '+FONT;const tw=Math.min(W*.8,ctx.measureText(t).width+28*s),h=28*s,x=W/2-tw/2,y=H-(TOUCHUI?235:140)*s;
+  ctx.fillStyle='rgba(0,20,30,.78)';uiRRect(ctx,x,y,tw,h,h/2);ctx.fill();ctx.strokeStyle=rodCol8();ctx.lineWidth=2*s;ctx.stroke();ctx.textAlign='center';ctx.textBaseline='middle';fitText(t,tw-20*s);ctx.fillStyle='#bff';ctx.fillText(t,W/2,y+h/2+1);ctx.restore();}
+function drawPauseInv8(){if(state!=='pause'||INV8.open)return;const s=sc8(),bw=260*s,bh=56*s,x=W/2-bw/2,y=TOUCHUI?Math.min(H-bh-14*s,H*.84):H*.66;ctx.save();INV8.rects=[];btn8(x,y,bw,bh,TOUCHUI?'INVENTORY':'INVENTORY  ['+KL('bag')+']','#ffd23a',()=>openInv8(),s,true);INV8.pauseBtn={x,y,w:bw,h:bh};ctx.restore();}
+// ---- input
+function invKey8(code){const rows=INV8.rowsCache||rows8(),n=rows.length,cur=rows[INV8.sel];
+  if(code==='Escape'||code==='KeyI'||code==='Backspace'||code==='KeyP'||code==='KeyC'){closeInv8();return;}
+  if(code==='ArrowLeft'||code==='KeyA'||code==='KeyQ'){INV8.tab=(INV8.tab+TABS8.length-1)%TABS8.length;INV8.sel=0;INV8.scroll=0;sfx('phone');return;}
+  if(code==='ArrowRight'||code==='KeyD'||code==='Tab'||code==='KeyE'&&false){INV8.tab=(INV8.tab+1)%TABS8.length;INV8.sel=0;INV8.scroll=0;sfx('phone');return;}
+  if(code==='ArrowUp'||code==='KeyW'){if(n)INV8.sel=(INV8.sel+n-1)%n;return;}
+  if(code==='ArrowDown'||code==='KeyS'){if(n)INV8.sel=(INV8.sel+1)%n;return;}
+  const m=/^Digit([1-6])$/.exec(code);let k=-1;if(m)k=+m[1]-1;else if(code==='Enter'||code==='Space'||code==='KeyE'||code==='NumpadEnter')k=0;
+  if(k>=0&&cur&&cur.acts&&cur.acts[k]){cur.acts[k].fn();INV8.flash=.25;}}
+onPress=(o=>function(code){if(INV8.open){try{invKey8(code);}catch(e){V8.err='key:'+e;console.error(e);}return;}
+  if(code==='KeyI'&&(state==='play'||state==='pause')&&!menu&&!phone.open&&!fade){openInv8();return;}
+  return o.apply(this,arguments);})(onPress);
+update=(o=>function(dt){if(INV8.open&&state==='play'){return;}return o.apply(this,arguments);})(update);
+render=(o=>function(){if(phone.open&&phone.app==='inv8'){phone.open=false;openInv8();}o.apply(this,arguments);
+  try{if(state!=='title'){if(INV8.open)drawInv8();else{drawPauseInv8();drawGearChip8();}}}catch(e){if(!V8.err){V8.err='draw:'+e;console.error(e);}}})(render);
+function hit8(x,y){for(let i=INV8.rects.length-1;i>=0;i--){const r=INV8.rects[i];if(x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h)return r;}return null;}
+function tap8(x,y){if(!INV8.open){if(state==='pause'&&INV8.pauseBtn){const b=INV8.pauseBtn;if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){openInv8();return true;}}return false;}
+  const r=hit8(x,y);if(r){r.fn();sfx('phone');}return true;}
+addEventListener('mousedown',e=>{if(e.button!==0)return;const [x,y]=tpos(e);if(tap8(x,y)){e.stopPropagation();e.preventDefault();}},true);
+addEventListener('touchstart',e=>{if(!INV8.open&&state!=='pause')return;let used=false;for(const t of e.changedTouches){const [x,y]=tpos(t);
+    if(INV8.open){INV8.drag={id:t.identifier,y,y0:y,sc:INV8.scroll,moved:false,x};used=true;}else if(tap8(x,y))used=true;}
+  if(used){e.stopPropagation();e.preventDefault();TS.lastTouch=performance.now();}},{capture:true,passive:false});
+addEventListener('touchmove',e=>{if(!INV8.open)return;const d=INV8.drag;e.stopPropagation();e.preventDefault();if(!d||!INV8.list)return;
+  for(const t of e.changedTouches)if(t.identifier===d.id){const [,y]=tpos(t);const dy=y-d.y0;if(Math.abs(dy)>12*DPRS)d.moved=true;if(d.moved){const ns=clamp(Math.round(d.sc-dy/INV8.list.rh),0,Math.max(0,INV8.list.n-INV8.list.vis));
+      if(ns!==INV8.scroll){INV8.scroll=ns;INV8.sel=clamp(INV8.sel,ns,ns+INV8.list.vis-1);}}}},{capture:true,passive:false});
+addEventListener('touchend',e=>{if(!INV8.open||!INV8.drag)return;const d=INV8.drag;for(const t of e.changedTouches)if(t.identifier===d.id){INV8.drag=null;e.stopPropagation();e.preventDefault();if(!d.moved)tap8(d.x,d.y0);}},{capture:true,passive:false});
+addEventListener('wheel',e=>{if(!INV8.open)return;e.preventDefault();const rows=INV8.rowsCache||[];if(!rows.length)return;INV8.sel=clamp(INV8.sel+(e.deltaY>0?1:-1),0,rows.length-1);},{passive:false});
+addEventListener('keydown',e=>{if(INV8.open&&e.code==='Tab'){e.preventDefault();}},true);
+// phone app shortcut
+{const bi=APPS.findIndex(a=>a.id==='bag');APPS.splice(bi<0?APPS.length:bi,0,{id:'inv8',name:'INVENTORY',col:'#ffd23a',g:'\u25a6'});}
+// save/load: state is inside career (already saved); tidy after load
+loadGame=(o=>function(){const r=o.apply(this,arguments);try{I8();attTidy8();}catch(e){}return r;})(loadGame);
+// ---- test / debug API
+window.PTA=window.PTA||{};PTA.inv={V8,I8,ATT8,FG8,INV8,open:openInv8,close:closeInv8,rows:rows8,key:invKey8,tap:tap8,addSpare:addSpare8,spares:spares8,sellSpare:sellSpare8,attach:attach8,detach:detach8,attBuy:attBuy8,attFx:attFx8,
+  gearBuy:gearBuy8,gearEquip:gearEquip8,gearBonus:gearBonus8,laser:()=>(laserCalc8(),Object.assign({},LZ8)),tackle:()=>V8T.placed.map(o=>({name:o.name,x:o.door.x,y:o.door.y,spot:o.spot,id:o.id})),tlog:V8T.log};
 
 </script></body></html>
