@@ -1046,17 +1046,17 @@ function update(dt){if(phone.open&&state==='play'&&!fade){phone.pausedT=(phone.p
 
 // ---------- car physics (upgrades, skill, nitro, flats) ----------
 function carPhysics(c,dt){const th=c.th,hb=c.hb,u=c.up||{},isP=c===player.inCar;let st=c.st;
-  const skill=isP?1+.06*stats.drive:1,tg=(1+.15*(u.tire||0))*skill*(c.flat?.6:1);
+  const skill=isP?1+.06*stats.drive:1,tg=(1+.15*(u.tire||0))*skill*(c.flat?.6:1)*(typeof wxGripMul==='function'?wxGripMul(c):1);
   if(c.flat&&c.driver)st+=.12*Math.sin(gtime*7)*.5+.08;
   let boost=false;if(isP&&u.nitro&&c.nos>0&&(keys.ShiftLeft||keys.ShiftRight)&&th>0&&!c.wreck){boost=true;c.nos=Math.max(0,c.nos-dt*.33);if(R()<.7)addP(c.x-Math.cos(c.a)*c.L/2,c.y-Math.sin(c.a)*c.L/2,-c.vx*.2+rr(-20,20),-c.vy*.2+rr(-20,20),.25,3,pick(['#6cf','#fff','#39f']),false);}
   else if(c.nos<1)c.nos=Math.min(1,c.nos+dt*.05);c.boost=boost;
   const mx=c.max*(boost?1.35:1)*(c.flat?.8:1),acc=c.acc*(boost?2.1:1);
-  let fx=Math.cos(c.a),fy=Math.sin(c.a);let vf=c.vx*fx+c.vy*fy;
+  const wxBk=typeof wxBrakeMul==='function'?wxBrakeMul(c):1;let fx=Math.cos(c.a),fy=Math.sin(c.a);let vf=c.vx*fx+c.vy*fy;
   const sf=Math.min(1,Math.abs(vf)/50),tr=(2.9-1.1*Math.min(1,Math.abs(vf)/mx))*(hb?1.45:1)*(isP?1+.04*stats.drive:1);
   c.a+=st*tr*sf*(vf>=0?1:-1)*dt+c.av*dt;c.av*=Math.exp(-4*dt);
   fx=Math.cos(c.a);fy=Math.sin(c.a);vf=c.vx*fx+c.vy*fy;let vr=-c.vx*fy+c.vy*fx;
-  if(th>0){if(vf<-5)vf+=c.brake*dt;else vf+=acc*th*dt*(1-Math.max(0,vf)/mx*.5);}
-  else if(th<0){if(vf>5)vf-=c.brake*dt*-th;else vf-=c.acc*.6*dt;}
+  if(th>0){if(vf<-5)vf+=c.brake*wxBk*dt;else vf+=acc*th*dt*(1-Math.max(0,vf)/mx*.5);}
+  else if(th<0){if(vf>5)vf-=c.brake*wxBk*dt*-th;else vf-=c.acc*.6*dt;}
   else{vf-=vf*1.1*dt;if(Math.abs(vf)<10)vf*=Math.exp(-6*dt);}
   if(!c.driver||c.wreck){vf*=Math.exp(-(c.wreck?3:1.4)*dt);}
   vf-=vf*.22*dt;vf=clamp(vf,-mx*.45,mx);
@@ -2850,7 +2850,7 @@ function drawHubBack(HL){const h=HL.hub;if(!h)return;const u=U;ctx.save();
 function drawHubFront(HL){const h=HL.hub;if(!h)return;const N=noteInit(),u=U;ctx.save();ctx.textBaseline='middle';
   // status bar: clock, signal, unread badge
   const sx=h.x+h.bz,sy=h.y+h.bz,sw=h.w-2*h.bz,sh=h.sb,fs=Math.round(sh*.78);ctx.fillStyle='#000';ctx.fillRect(sx,sy,sw,sh);
-  const d=dnDate();ctx.font='bold '+fs+'px '+FONT;ctx.textAlign='left';ctx.fillStyle='#fff';const clk=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');ctx.fillText(clk,sx+sh*.3,sy+sh/2+1);const clkEnd=sx+sh*.3+ctx.measureText(clk).width+sh*.3;
+  const d=dnDate();ctx.font='bold '+fs+'px '+FONT;ctx.textAlign='left';ctx.fillStyle='#fff';const clk=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');ctx.fillText(clk,sx+sh*.3,sy+sh/2+1);let clkEnd=sx+sh*.3+ctx.measureText(clk).width+sh*.3;if(typeof wxTag==='function'){const wt=wxTag();if(wt){ctx.fillStyle=wt[1];ctx.fillText(wt[0],clkEnd-sh*.1,sy+sh/2+1);clkEnd+=ctx.measureText(wt[0]).width+sh*.2;ctx.fillStyle='#fff';}}
   let rx=sx+sw-sh*.3;const bw=Math.max(2,sh*.16);for(let i=3;i>=0;i--){const bh=sh*(.3+.15*i);ctx.fillStyle=i<3||stars===0?'#e8e8e8':'#777';ctx.fillRect(rx-bw,sy+sh*.85-bh,bw,bh);rx-=bw*1.6;}
   rx-=sh*.25;ctx.textAlign='right';ctx.fillStyle='#bbb';ctx.font='bold '+Math.round(fs*.85)+'px '+FONT;{const pw=ctx.measureText('PTA').width,bt=N.unread>0?ctx.measureText('\u2709 '+Math.min(99,N.unread)).width+sh:0;if(rx-pw-sh*.5-bt>clkEnd){ctx.fillText('PTA',rx,sy+sh/2+1);rx-=pw+sh*.5;}}
   if(N.unread>0){const t=String(Math.min(99,N.unread)),r=sh*.48;ctx.font='bold '+fs+'px '+FONT;let lab='\u2709 '+t,tw=Math.max(r*2,ctx.measureText(lab).width+r);if(rx-tw<clkEnd){lab=t;tw=Math.max(r*2,ctx.measureText(lab).width+r);}
@@ -6102,5 +6102,153 @@ function pzSnap(trim){PZ.tgt=pzWantAt(focus.x,focus.y);PZ.acc=0;PZ.thinAcc=0;PZ.
 startGame=(o=>function(){const r=o.apply(this,arguments);try{focus.x=player.x;focus.y=player.y;pzSnap(true);}catch(e){}return r;})(startGame);
 respawn=(o=>function(){const r=o.apply(this,arguments);try{pzSnap(false);}catch(e){}return r;})(respawn);
 if(typeof __game!=='undefined')__game.pz=PZ;
+
+// ======================================================================= v7w: Miami weather
+//  States clear / cloudy / shower / storm, scheduled on PTA.time: short sudden afternoon storms
+//  (about 1-5 PM) and the odd night storm. Cloud, rain, lightning, ground wetness and puddles all ease
+//  in and out. Visuals (pooled, half-res rain layer): angled streaks, splashes, wet sheen, puddles,
+//  overcast tint, lightning (lights the night lightmap) with delayed thunder, wet reflections of street
+//  lamps and car lights at night. Gameplay: wet roads = less grip + longer braking, peds hurry / open
+//  umbrellas / fewer are out, rain + thunder cut witness sight and hearing, lightning lights you up.
+//  Saved in saves. Phone CLOCK + status bar readout, SYSTEM/CLOCK "Rain effects" Off..Full.
+//  Console / tests: PTA.weather.set('storm',{instant:true}).
+const WX_ST={clear:{c:0,r:0,l:0,name:'CLEAR',tag:null,col:'#ffd23a'},cloudy:{c:.62,r:0,l:0,name:'CLOUDY',tag:'CLOUD',col:'#c4ceda'},
+  shower:{c:.8,r:.42,l:0,name:'LIGHT SHOWER',tag:'RAIN',col:'#8fd0ff'},storm:{c:1,r:1,l:1,name:'THUNDERSTORM',tag:'STORM',col:'#d0a8ff'}};
+const WX_FX_NAMES=['Off','Low','Medium','Full'],WX_FX_DROPS=[0,.3,.6,1];
+const WX={st:'clear',left:120,cloud:0,rain:0,light:0,wet:0,pud:0,flash:0,flashT:9,bolt:null,nextBolt:8,thunder:[],mask:0,held:false,fx:3,
+  stats:{changes:0,bolts:0,thunders:0,frames:0,ms:0,last:0,drops:0,splash:0,pud:0,refl:0},cbs:[],seed:(Math.random()*1e9)>>>0,hear0:null,wiperT:0,lastCam:null};
+try{const v=parseInt(localStorage.getItem('pta_rainfx'),10);if(v>=0&&v<=3)WX.fx=v;}catch(e){}
+function wxR(){let t=WX.seed=(WX.seed+0x6D2B79F5)>>>0;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;}
+const wxRR=(a,b)=>a+wxR()*(b-a);
+// ---------------------------------------------------------------- schedule
+function wxPick(from,h){const aft=h>=12.5&&h<17.5,night=h>=21||h<5,u=wxR();
+  if(from==='clear'){const go=aft?.62:night?.22:.14;return u<go?['cloudy',wxRR(12,35)]:['clear',aft?wxRR(30,90):wxRR(70,200)];}
+  if(from==='cloudy'){const s=aft?.46:night?.2:.06,sh=aft?.3:night?.28:.22;return u<s?['storm',wxRR(25,65)]:u<s+sh?['shower',wxRR(15,40)]:['clear',aft?wxRR(30,80):wxRR(70,200)];}
+  if(from==='shower')return u<.55?['cloudy',wxRR(12,30)]:['clear',wxRR(60,180)];
+  return u<.5?['shower',wxRR(10,25)]:['cloudy',wxRR(12,30)];}// storm
+function wxSet(st,o){o=o||{};if(!WX_ST[st])return false;const prev=WX.st;WX.st=st;WX.left=o.mins!=null?o.mins:(st==='clear'?wxRR(60,160):st==='cloudy'?wxRR(15,35):st==='shower'?wxRR(15,40):wxRR(25,65));
+  if(o.hold!=null)WX.held=!!o.hold;if(o.instant){const T=WX_ST[st];WX.cloud=T.c;WX.rain=T.r;WX.light=T.l;if(T.r>.3){WX.wet=Math.max(WX.wet,Math.min(1,T.r*1.2));if(T.r>.9)WX.pud=Math.max(WX.pud,.85);}}
+  if(prev!==st){WX.stats.changes++;for(const cb of WX.cbs.slice()){try{cb(st,prev);}catch(e){}}}return true;}
+function wxEase(v,t,dt,tau){return v+(t-v)*Math.min(1,dt/tau);}
+function wxTick(dt){if(dt<=0)return;const run=state==='play'&&!phone.open&&!fade;
+  if(run){WX.left-=dt*dnRate();if(WX.left<=0&&!WX.held){const [n,m]=wxPick(WX.st,dnHourF());wxSet(n,{mins:m});}}
+  if(!run)return;const T=WX_ST[WX.st];
+  WX.cloud=wxEase(WX.cloud,T.c,dt,T.c>WX.cloud?7:10);
+  const rt=T.r*clamp((WX.cloud-.35)/.4,0,1);WX.rain=wxEase(WX.rain,rt,dt,rt>WX.rain?5:4);if(WX.rain<.004&&rt===0)WX.rain=0;
+  WX.light=wxEase(WX.light,T.l*clamp((WX.rain-.55)/.3,0,1),dt,3);
+  if(WX.rain>.05)WX.wet=Math.min(1,WX.wet+dt*WX.rain*.085);else WX.wet=Math.max(0,WX.wet-dt*.0065);
+  if(WX.rain>.3&&WX.wet>.5)WX.pud=Math.min(1,WX.pud+dt*.03*WX.rain);else if(WX.rain<.05)WX.pud=Math.max(0,WX.pud-dt*.0045);
+  // lightning + thunder
+  WX.flashT+=dt;if(WX.light>.2){WX.nextBolt-=dt;if(WX.nextBolt<=0)wxStrike();}
+  const ft=WX.flashT;WX.flash=ft<.07?1:ft<.13?.25:ft<.22?.8:ft<.9?.8*Math.exp(-(ft-.22)*6):0;
+  for(let i=WX.thunder.length-1;i>=0;i--){const q=WX.thunder[i];q.t-=dt;if(q.t<=0){WX.thunder.splice(i,1);WX.stats.thunders++;WX.mask=Math.max(WX.mask,q.k);
+    if(typeof sNoise==='function'){sNoise(2.6,150,.75*q.k,'lowpass');sNoise(.7,520,.35*q.k,'lowpass');if(q.k>.75)sNoise(.18,2400,.25*q.k,'bandpass');}}}
+  WX.mask=Math.max(0,WX.mask-dt*.45);
+  // witnesses: rain + thunder cut hearing (sight is cut in stVis)
+  if(WX.hear0==null)WX.hear0=ST_CFG.hear;ST_CFG.hear=WX.hear0*wxHearMul();
+  wxAudio(dt);}
+function wxStrike(o){o=o||{};WX.flashT=0;WX.stats.bolts++;WX.nextBolt=wxRR(5,13)/Math.max(.35,WX.light);const d=o.dist!=null?o.dist:wxR();
+  WX.bolt={x:wxRR(.15,.85),y:wxRR(.25,.7),seed:(wxR()*1e6)|0,d};WX.thunder.push({t:.35+d*2.8,k:1-d*.6});return WX.bolt;}
+function wxGripMul(c){if(!WX.wet||c.boat)return 1;return 1-(c===player.inCar?.24:.14)*WX.wet;}
+function wxBrakeMul(c){if(!WX.wet||c.boat)return 1;return 1-(c===player.inCar?.3:.18)*WX.wet;}
+function wxSightMul(){return 1-.32*WX.rain;}
+function wxHearMul(){return Math.max(.4,1-.33*WX.rain-.3*WX.mask);}
+function wxTag(){const T=WX_ST[WX.st];return T.tag?[T.tag,T.col]:null;}
+update=(o=>function(dt){o(dt);try{wxTick(dt);}catch(e){}})(update);
+// ---------------------------------------------------------------- stealth: rain hides you, lightning lights you up
+stVis=(o=>function(){let v=o()*wxSightMul();if(WX.flash>.15&&!interior)v=Math.max(v,.95*WX.flash);return clamp(v,0,1);})(stVis);
+// ---------------------------------------------------------------- peds: fewer out, hurry, umbrellas
+if(typeof pzWantAt==='function')pzWantAt=(o=>function(x,y,m){return o(x,y,m)*(1-.55*WX.rain);})(pzWantAt);
+function wxUmbOk(p){return p.kind==='ped'&&!p.cop&&!p.gang&&!p.dead&&!p.down&&!p.ko&&!p.inCar;}
+updatePed=(o=>function(p,dt){if(WX.rain>.2&&!p.dead&&p.kind==='ped'&&!p.cop&&!p.gang&&p.state==='wander'){const s=p.spd;p.spd=s*(1+.5*WX.rain);try{o(p,dt);}finally{p.spd=s;}}else o(p,dt);})(updatePed);
+const WX_UMB=['#d03040','#2860c0','#f0c020','#30a060','#202428','#e070b0','#f08030'];
+drawPed=(o=>function(p,G){o(p,G);if(WX.rain<.15||(G&&G!==g)||p===player||!wxUmbOk(p))return;if(p.umb===undefined)p.umb=hash2((p.x*7)|0,(p.y*13)|0)<.6?((hash2(p.x|0,p.y|0)*7)|0):-1;if(p.umb<0)return;
+  const k=Math.min(1,(WX.rain-.15)*4),r=9.5*k;g.save();g.translate(p.x,p.y-2);g.fillStyle=WX_UMB[p.umb%7];g.beginPath();g.arc(0,0,r,0,TAU);g.fill();
+  g.strokeStyle='rgba(0,0,0,.35)';g.lineWidth=.8;g.beginPath();for(let i=0;i<4;i++){const a=i*PI/4;g.moveTo(-Math.cos(a)*r,-Math.sin(a)*r);g.lineTo(Math.cos(a)*r,Math.sin(a)*r);}g.stroke();
+  g.fillStyle='rgba(255,255,255,.22)';g.beginPath();g.arc(-r*.3,-r*.3,r*.45,0,TAU);g.fill();g.restore();})(drawPed);
+// ---------------------------------------------------------------- puddles (fixed spots, bucketed)
+const WXP={B:new Map(),n:0,built:false};
+function wxBuildPuddles(){WXP.B.clear();WXP.n=0;for(let ty=1;ty<N-1;ty++)for(let tx=1;tx<N-1;tx++){const t=map[ty*N+tx];if(t!==ROAD&&t!==SIDE&&t!==LOT&&t!==ALLEY)continue;
+    const h=hash2(tx*3+11,ty*5+7);if(h>(t===ROAD?.075:.05))continue;const h2=hash2(tx+91,ty+37),h3=hash2(tx+5,ty+113);
+    const P={x:(tx+.2+.6*h2)*T,y:(ty+.2+.6*h3)*T,rx:7+h2*11,ry:4+h3*6,rot:(h*40)%PI,s:(h*1e5)|0,road:t===ROAD};
+    const k=((P.x/T/8)|0)*1000+((P.y/T/8)|0);if(!WXP.B.has(k))WXP.B.set(k,[]);WXP.B.get(k).push(P);WXP.n++;}WXP.built=true;}
+function wxPudEach(f){if(!WXP.built)wxBuildPuddles();const c0=Math.floor((vx0-30)/T/8),c1=Math.floor((vx1+30)/T/8),r0=Math.floor((vy0-30)/T/8),r1=Math.floor((vy1+30)/T/8);
+  for(let cy=r0;cy<=r1;cy++)for(let cx=c0;cx<=c1;cx++){const a=WXP.B.get(cx*1000+cy);if(a)for(const P of a)if(P.x>vx0-30&&P.x<vx1+30&&P.y>vy0-30&&P.y<vy1+30)f(P);}}
+// ground pass (world transform, under peds / cars / buildings)
+drawPOIGround=(o=>function(){if(!interior&&WX.fx>0&&(WX.wet>.02||WX.pud>.02)){
+    if(WX.wet>.02){g.fillStyle='rgba(6,14,28,'+(.17*WX.wet).toFixed(3)+')';g.fillRect(vx0-20,vy0-20,vx1-vx0+40,vy1-vy0+40);}
+    if(WX.pud>.03){const a=Math.min(1,WX.pud*1.4),sz=.35+.65*Math.min(1,WX.pud*1.2),night=DN.dark;let n=0;
+      g.fillStyle='rgba('+Math.round(34-20*night)+','+Math.round(50-30*night)+','+Math.round(68-36*night)+','+(.62*a).toFixed(3)+')';g.beginPath();
+      wxPudEach(P=>{g.moveTo(P.x+P.rx*sz,P.y);g.ellipse(P.x,P.y,P.rx*sz,P.ry*sz,P.rot,0,TAU);n++;});g.fill();WX.stats.pud=n;
+      // sky sheen on the near edge + rain rings
+      g.strokeStyle='rgba(200,220,255,'+((.18-.1*night)*a).toFixed(3)+')';g.lineWidth=1;g.beginPath();
+      wxPudEach(P=>{g.moveTo(P.x-P.rx*sz*.6,P.y-P.ry*sz*.4);g.ellipse(P.x,P.y,P.rx*sz*.75,P.ry*sz*.6,P.rot,PI*1.1,PI*1.6);
+        if(WX.rain>.1&&WX.fx>1){const ph=(gtime*1.7+P.s*.37)%1,rr2=ph*P.ry*sz*.9;g.moveTo(P.x+rr2*1.4,P.y);g.ellipse(P.x,P.y,rr2*1.4,rr2,0,0,TAU);}});g.stroke();}}
+  return o();})(drawPOIGround);
+// ---------------------------------------------------------------- screen pass: tint, reflections, rain, splashes, lightning
+const WXD={n:0,x:null,y:null,l:null,can:null,cx:null,sp:null,spN:0,refl:null};
+function wxPool(){const M=900;if(!WXD.x){WXD.x=new Float32Array(M);WXD.y=new Float32Array(M);WXD.l=new Float32Array(M);WXD.sp=new Float32Array(160*3);
+    for(let i=0;i<M;i++){WXD.x[i]=wxR();WXD.y[i]=wxR();WXD.l[i]=.6+wxR()*.4;}}
+  const w=Math.max(2,Math.ceil(LW/2)),h=Math.max(2,Math.ceil(LH/2));if(!WXD.can){WXD.can=document.createElement('canvas');WXD.cx=WXD.can.getContext('2d');}
+  if(WXD.can.width!==w||WXD.can.height!==h){WXD.can.width=w;WXD.can.height=h;}}
+function wxReflSpr(warm){const key=warm;if(WXD.refl&&WXD.refl[key])return WXD.refl[key];WXD.refl=WXD.refl||{};const c=document.createElement('canvas');c.width=16;c.height=64;const x=c.getContext('2d');
+  const col=warm==='w'?'255,214,150':warm==='r'?'255,60,50':'230,240,255';const gr=x.createLinearGradient(0,0,0,64);gr.addColorStop(0,'rgba('+col+',.9)');gr.addColorStop(.35,'rgba('+col+',.45)');gr.addColorStop(1,'rgba('+col+',0)');
+  x.fillStyle=gr;x.beginPath();x.ellipse(8,26,7,30,0,0,TAU);x.fill();WXD.refl[key]=c;return c;}
+function wxPre(){if(interior||state==='title')return;const c=WX.cloud;if(c<.01)return;const k=(WX.fx>0?.34:.22)*c*(1-.55*DN.dark);
+  g.fillStyle='rgba(38,50,66,'+k.toFixed(3)+')';g.fillRect(0,0,LW,LH);}
+function wxPost(){if(interior||state==='title')return;const t0=performance.now();WX.stats.frames++;const fx=WX.fx,dm=WX_FX_DROPS[fx];
+  // wet reflections of street lamps + car lights at night
+  WX.stats.refl=0;if(fx>0&&WX.wet>.08&&DN.dark>.15&&DN.on){const a=WX.wet*Math.min(1,DN.dark*1.4),sc=S;g.globalCompositeOperation='lighter';
+    const one=(x,y,kind,al,len)=>{const p=Pj(x,y,0);if(p[0]<-20||p[0]>LW+20||p[1]<-40||p[1]>LH+10)return;g.globalAlpha=Math.min(1,al);const s=wxReflSpr(kind);g.drawImage(s,p[0]-5*sc,p[1]-4*sc,10*sc,len*sc);WX.stats.refl++;};
+    if(typeof lampEach==='function')lampEach(40,L=>{if(L.down>0)return;one(L.hx,L.hy+6,L.kind==='pink'?'r':'w',.55*a,30+22*WX.wet);});
+    for(const c of cars){if(c.wreck||!(c.driver||player.inCar===c)||c.boat||!inView(c.x,c.y,60))continue;const ca=Math.cos(c.a),sa=Math.sin(c.a),hl=c.L/2;
+      one(c.x+ca*(hl+14),c.y+sa*(hl+14)+4,'c',.45*a,26);one(c.x-ca*hl,c.y-sa*hl+3,'r',.35*a,16);}
+    g.globalAlpha=1;g.globalCompositeOperation='source-over';}
+  // rain streaks + splashes on a half-res layer (pooled)
+  const r=WX.rain;WX.stats.drops=0;WX.stats.splash=0;
+  if(r>.01&&dm>0){wxPool();const X=WXD.cx,w=WXD.can.width,h=WXD.can.height;X.setTransform(1,0,0,1,0,0);X.clearRect(0,0,w,h);
+    const n=Math.min(900,Math.round((120+700*r)*dm*(w*h)/(640*360)));const dt=Math.min(.05,Math.max(0,WX._ft?gtime-WX._ft:0));WX._ft=gtime;
+    const cam=[camX,camY];let mx=0,my=0;if(WX.lastCam){mx=(cam[0]-WX.lastCam[0])*S/2/w;my=(cam[1]-WX.lastCam[1])*S/2/h;if(Math.abs(mx)>.2||Math.abs(my)>.2){mx=0;my=0;}}WX.lastCam=cam;
+    const vy=(1.5+r*.7)*dt,vx=-.35*vy*h/w,L=(5+7*r);
+    X.strokeStyle='rgba(196,214,238,'+(.28+.3*r).toFixed(2)+')';X.lineWidth=1;X.beginPath();
+    for(let i=0;i<n;i++){let x=WXD.x[i]-mx*.85+vx*WXD.l[i],y=WXD.y[i]-my*.85+vy*WXD.l[i];if(y>1){y-=1;x=wxR();}if(y<0)y+=1;if(x<0)x+=1;if(x>1)x-=1;WXD.x[i]=x;WXD.y[i]=y;
+      const px=x*w,py=y*h,l=L*WXD.l[i];X.moveTo(px,py);X.lineTo(px+.35*l,py-l);}X.stroke();WX.stats.drops=n;
+    if(fx>=2){const S2=WXD.sp,ns=Math.round(60*r*(fx===3?1:.5));// splashes: tiny rings where drops land (roads + roofs)
+      for(let i=0;i<ns;i++){let k=(i*3);S2[k+2]-=dt*4;if(S2[k+2]<=0){S2[k]=wxR()*w;S2[k+1]=wxR()*h;S2[k+2]=wxR();}}
+      X.strokeStyle='rgba(220,232,255,'+(.35+.25*r).toFixed(2)+')';X.beginPath();for(let i=0;i<ns;i++){const k=i*3,life=S2[k+2],rad=(1-life)*2.6+.4;X.moveTo(S2[k]+rad,S2[k+1]);X.ellipse(S2[k],S2[k+1],rad,rad*.55,0,0,TAU);}X.stroke();WX.stats.splash=ns;}
+    g.drawImage(WXD.can,0,0,w,h,0,0,LW,LH);}
+  // lightning: light the whole scene (and the night lightmap) for a moment
+  if(WX.flash>.01){const lim=fx===0?.3:1;g.fillStyle='rgba(222,230,255,'+(WX.flash*(.28+.4*DN.dark)*lim).toFixed(3)+')';g.fillRect(0,0,LW,LH);
+    if(WX.bolt&&WX.flashT<.22&&fx>=2&&WX.bolt.d<.6){const b=WX.bolt;let x=b.x*LW,y=0,s=b.seed;g.strokeStyle='rgba(245,248,255,.95)';g.lineWidth=2;g.beginPath();g.moveTo(x,y);
+      const ty=b.y*LH;while(y<ty){s=(s*16807)%2147483647;x+=((s%1000)/1000-.5)*28;y+=10+(s%7)*3;g.lineTo(x,y);}g.stroke();}}
+  const ms=performance.now()-t0;WX.stats.ms=WX.stats.ms*.9+ms*.1;WX.stats.last=ms;}
+dnLight=(o=>function(){wxPre();o();try{wxPost();}catch(e){WX.err=String(e);}})(dnLight);
+// ---------------------------------------------------------------- audio: rain loop, thunder (in wxTick), wipers
+function wxAudio(dt){if(typeof AC==='undefined'||!AC)return;try{
+  if(!WX.au){const s=AC.createBufferSource();s.buffer=noiseBuf;s.loop=true;const f=AC.createBiquadFilter();f.type='bandpass';f.frequency.value=1500;f.Q.value=.5;
+    const f2=AC.createBiquadFilter();f2.type='lowpass';f2.frequency.value=5200;const gn=AC.createGain();gn.gain.value=0;s.connect(f);f.connect(f2);f2.connect(gn);gn.connect(master);s.start();WX.au={s,gn};}
+  const v=muted?0:(.07*WX.rain+.07*WX.rain*WX.rain)*(interior?.35:1)*(player.inCar?.7:1);WX.au.gn.gain.setTargetAtTime(v,AC.currentTime,.4);
+  if(player.inCar&&!player.inCar.boat&&WX.rain>.15){WX.wiperT-=dt;if(WX.wiperT<=0){WX.wiperT=WX.rain>.6?.8:1.4;sTone(560,380,.09,.03,'triangle');}}else WX.wiperT=0;}catch(e){}}
+// ---------------------------------------------------------------- saves / new game
+saveGame=(o=>function(){o();try{const s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');if(s){s.wx={st:WX.st,left:Math.round(WX.left),cloud:+WX.cloud.toFixed(3),rain:+WX.rain.toFixed(3),wet:+WX.wet.toFixed(3),pud:+WX.pud.toFixed(3)};localStorage.setItem(SAVE_KEY,JSON.stringify(s));}}catch(e){}})(saveGame);
+loadGame=(o=>function(){const r=o();if(r){try{const s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');const w=s&&s.wx;if(w&&WX_ST[w.st]){WX.st=w.st;WX.left=+w.left||60;WX.cloud=clamp(+w.cloud||0,0,1);WX.rain=clamp(+w.rain||0,0,1);WX.wet=clamp(+w.wet||0,0,1);WX.pud=clamp(+w.pud||0,0,1);WX.held=false;WX.light=WX_ST[w.st].l*clamp((WX.rain-.55)/.3,0,1);}}catch(e){}}return r;})(loadGame);
+startGame=(o=>function(){WX.st='clear';WX.left=wxRR(50,140);WX.cloud=WX.rain=WX.light=WX.wet=WX.pud=WX.flash=WX.mask=0;WX.flashT=9;WX.thunder=[];WX.held=false;return o.apply(this,arguments);})(startGame);
+// ---------------------------------------------------------------- phone: CLOCK readout + Rain effects setting
+function wxSetFx(v){WX.fx=clamp(v|0,0,3);try{localStorage.setItem('pta_rainfx',String(WX.fx));}catch(e){}}
+function wxFxItem(){return{label:'Rain effects',sub:['Weather still happens; no rain drawn','Light drops, no splashes','Drops + splashes (lighter)','Everything (default)'][WX.fx],right:WX_FX_NAMES[WX.fx].toUpperCase(),
+  adj:d=>wxSetFx(WX.fx+d),act:()=>wxSetFx(WX.fx>=3?0:WX.fx+1)};}
+function wxLine(){const T=WX_ST[WX.st];let s='WEATHER  '+T.name;if(WX.wet>.25&&WX.st!=='storm'&&WX.st!=='shower')s+='  (ROADS WET)';return s;}
+phoneView=(o=>function(){const v=o();const a=phone.app;
+  if(a==='clock'&&v){v.lines.push(wxLine());if(WX.wet>.4)v.lines.push('Wet roads: brake early.');const bi=v.items.findIndex(it=>it.label==='Night brightness');v.items.splice(bi<0?v.items.length:bi+1,0,wxFxItem());
+    v.foot.push('Miami: short storms most afternoons (1-5 PM).');}
+  if(a==='system'&&v){const bi=v.items.findIndex(it=>it.label==='Night brightness');v.items.splice(bi<0?v.items.length:bi+1,0,wxFxItem());}return v;})(phoneView);
+// ---------------------------------------------------------------- public API
+PTA.weather={states:Object.keys(WX_ST),
+  get:()=>({state:WX.st,name:WX_ST[WX.st].name,cloud:+WX.cloud.toFixed(3),rain:+WX.rain.toFixed(3),lightning:+WX.light.toFixed(3),wet:+WX.wet.toFixed(3),puddles:+WX.pud.toFixed(3),held:WX.held,minsLeft:Math.round(WX.left),effects:WX_FX_NAMES[WX.fx]}),
+  set:(st,o)=>wxSet(st,Object.assign({hold:true},o||{})),release:()=>{WX.held=false;},strike:o=>wxStrike(o),
+  setEffects:v=>wxSetFx(typeof v==='string'?WX_FX_NAMES.findIndex(n=>n.toLowerCase()===v.toLowerCase()):v),effects:()=>WX_FX_NAMES[WX.fx],
+  gripMul:()=>wxGripMul(player.inCar||{}),sightMul:wxSightMul,hearMul:wxHearMul,isRaining:()=>WX.rain>.15,isStorm:()=>WX.st==='storm',
+  onChange:cb=>{WX.cbs.push(cb);return()=>{const i=WX.cbs.indexOf(cb);if(i>=0)WX.cbs.splice(i,1);};},_wx:WX};
+if(typeof __game!=='undefined')__game.wx=WX;
 
 </script></body></html>
